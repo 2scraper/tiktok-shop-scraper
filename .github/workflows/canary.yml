@@ -1,0 +1,147 @@
+# Real runs against TikTok Shop. tests.yml (deliberately) never touches
+# the site, a credential or a paid product; everything that does is here.
+#
+# WHY THIS CANARY SKIPS WITHOUT A SECRET, UNLIKE ITS THREE SIBLINGS
+# -----------------------------------------------------------------
+# CLAUDE.md §11: a canary that cannot pass must SKIP rather than fail,
+# because a check that is always red teaches everyone to ignore checks.
+# §21 gives the other half — a canary that CAN pass without a credential
+# should never be gated on one — and the three sibling repos are that
+# case, running green every morning from a bare runner.
+#
+# This repo is the first case. Measured 2026-09-22, TikTok Shop served 0
+# of 3 product pages to a plain HTTP client, 0 of 3 to a local browser
+# (headless and headful), 0 of 3 through a US residential exit, and 3 of 3
+# through a 2Captcha Scraping Browser profile that had already visited
+# tiktok.com. A GitHub runner has none of that, so an ungated canary here
+# would be red every day and would be testing nothing.
+#
+# So the job is gated on the profile secret and says why when it is
+# absent.
+name: canary
+
+on:
+  schedule:
+    - cron: "47 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  product:
+    name: a real product scrape (skips without a Scraping Browser profile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # `secrets` is not available in a job-level `if`, so presence is
+      # tested through job env and read in each step's `if`.
+      HAS_CDP: ${{ secrets.TIKTOK_CDP_ENDPOINT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_CDP == 'true'
+      - uses: actions/setup-python@v5
+        if: env.HAS_CDP == 'true'
+        with:
+          python-version: "3.13"
+
+      - name: Install the core and the Playwright engine
+        if: env.HAS_CDP == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-playwright.txt
+
+      - name: Scrape one product
+        id: run
+        if: env.HAS_CDP == 'true'
+        env:
+          # Through the ENVIRONMENT, never a --flag: a secret in argv is
+          # readable by anything that can run `ps` (CLAUDE.md §3).
+          TIKTOK_CDP_ENDPOINT: ${{ secrets.TIKTOK_CDP_ENDPOINT }}
+        run: |
+          set +e   # GitHub runs `run:` under `bash -e`, and a non-zero exit
+                   # would abort the step BEFORE the echo below.
+          python playwright_scraper.py --url 1732432759321694958 \
+            --format both --out canary_product --dump-html
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Assert what the run actually produced
+        if: env.HAS_CDP == 'true'
+        run: |
+          python - <<'PY'
+          import json, sys
+
+          rc = int("${{ steps.run.outputs.exit_code }}")
+          meta = json.load(open("canary_product.meta.json"))
+          rows = json.load(open("canary_product.json"))
+          fail = []
+
+          # Exit 3 is the interesting failure here and it is NOT tolerated:
+          # the whole point of this canary is to notice when the one
+          # configuration that works stops working.
+          if rc == 3:
+              fail.append("exit 3 — the challenge was not cleared. That is "
+                          "this canary's job to report: the Scraping "
+                          "Browser profile has stopped getting through.")
+          elif rc != 0:
+              fail.append(f"exit {rc}")
+          if meta["status"] != "complete":
+              fail.append(f"status {meta['status']!r}")
+          if len(rows) != 1:
+              fail.append(f"{len(rows)} rows, expected 1")
+
+          for row in rows:
+              # The columns that only a SERVED page can fill.
+              for column in ("price", "currency", "title", "seller_id",
+                             "shop_name", "image_urls", "description"):
+                  if row.get(column) in (None, "", []):
+                      fail.append(f"{column} is empty")
+              # Price sanity: a range, never an equality — two fetches
+              # minutes apart returned 100.80 and 94.81 on this listing.
+              price = row.get("price")
+              if not isinstance(price, (int, float)) or not 1 < price < 10_000:
+                  fail.append(f"price {price!r} is outside a plausible range")
+              if row.get("original_price") and row["original_price"] < price:
+                  fail.append("original_price is below price — the EU "
+                              "30-day-low trap this family met elsewhere")
+              # The site's own verdict, which only a served page carries.
+              if row.get("site_risk_level") is None:
+                  fail.append("no site_risk_level — was this page served?")
+
+          if meta.get("products_challenged"):
+              fail.append(f"challenged: {meta['products_challenged']}")
+
+          if fail:
+              print("::error::canary FAILED")
+              for line in fail:
+                  print(f"  - {line}")
+              sys.exit(1)
+          row = rows[0]
+          print(f"canary OK: {row['title'][:48]!r} at "
+                f"{row['price']} {row['currency']}, TikTok's own verdict "
+                f"risk_level={row['site_risk_level']} "
+                f"is_bot={row['site_says_bot']}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always() && env.HAS_CDP == 'true'
+        with:
+          name: canary-product
+          path: |
+            canary_product.json
+            canary_product.csv
+            canary_product.meta.json
+            canary_product_product_*.json
+          retention-days: 7
+
+      - name: Say why this was skipped
+        if: env.HAS_CDP != 'true'
+        run: |
+          echo "::notice::Skipped: TIKTOK_CDP_ENDPOINT is not set. Unlike"\
+               "its three sibling repos, this one CANNOT run without a"\
+               "credential: measured 2026-09-22, TikTok Shop served 0 of 3"\
+               "product pages to a plain client, 0 of 3 to a local browser,"\
+               "0 of 3 through a US residential exit, and 3 of 3 through a"\
+               "2Captcha Scraping Browser profile. A canary running here"\
+               "without one would be red every morning and would be"\
+               "testing nothing."
