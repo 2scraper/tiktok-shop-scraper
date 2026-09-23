@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. Keep a Changelog
 format; SemVer as closely as a CLI toolkit can manage.
 
+## [Unreleased]
+
+### Fixed
+
+> **`diff_runs.py` never reported a price change.** Its `TRACKED_FIELDS`
+> were tiktok-profile-scraper's account columns, 26 of which `ShopProduct`
+> does not have, and `price` was not among them — while the README says a
+> price change reported by `diff_runs.py` is ordinary here. It now tracks
+> this repo's own columns (price, discount, sales, rating, shop figures,
+> shipping). `smoke_test.py` pins every tracked name against the dataclass
+> and checks that a changed column is actually reported.
+
+> **A copied `.env.example` set `TIKTOK_URL=nasa`**, a TikTok handle, which
+> is not a product. It is now a real product id, and the file says the
+> Scraping Browser endpoint is the access here rather than calling a key
+> unnecessary because "a profile page is served".
+
+- **Donor prose removed from the shared core.** `output_writer.py`,
+  `diff_runs.py`, the engines, `page_flow.py`, `smoke_test.py`,
+  `.github/ci_checks.py` and the `Dockerfile` carried text from the repos
+  this core was copied from — YouTube comment threads, `--sort top`,
+  reply threads, job listings, "the business", `--mode comments --out
+  software-engineer` — describing those sites as if they were this one.
+  Rewritten from this repo's own README, code and fixtures, or deleted
+  where there was no measured equivalent. Explicit sibling provenance
+  ("measured on tiktok-profile-scraper's route", "a sibling repo
+  (youtube-scraper) had…") is kept and now says whose it is.
+- tiktok-ads-scraper leftovers removed: an unused `capture_search_token`
+  / `_click_search` pair in all three engines, Selenium's performance-log
+  capability that only existed for it, an unused `Advertisement` alias, an
+  unused `page_flow.sample_share` with the Ad Library's numbers in it, and
+  `SOURCE_DEFAULT`'s comment about the Ad Library.
+- `page_flow.py`, the engines and `smoke_test.py` described a profile
+  page, an account and `video_unavailable`; they now describe a product
+  page. `run_meta`'s test data is a `product` run on `shop.tiktok.com`.
+- `.github/ci_checks.py` no longer exempts an `avatar_id` column this repo
+  does not have from the credential scan.
+
 ## [0.1.1] — 2026-09-23
 
 > **Correction to v0.1.0.** It described a 2Captcha captcha-solving method

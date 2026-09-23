@@ -254,7 +254,8 @@ class _BrowserSession:
         A function object, never an evaluated string.
 
         Not because TikTok forbids the alternative — measured 2026-09-22,
-        its `content-security-policy` header on a profile page DOES carry
+        its `content-security-policy` header on a profile page (the sibling
+        tiktok-profile-scraper's route) DOES carry
         `'unsafe-eval'`, so a string-eval would work here today. The
         comment inherited with this core claimed the opposite about this
         site, which is CLAUDE.md §16 exactly: a copied file's certainty is
@@ -281,50 +282,6 @@ class _BrowserSession:
             return self.page.url
         except Exception:
             return ""
-
-    def capture_search_token(self, path_fragment: str, header: str):
-        """Let the Ad Library search once and keep the header it sends.
-
-        Playwright's dialect. The OPERATION is named in the shared runner
-        and only the spelling lives here, because a shared module that
-        carried a snippet would acquire one driver's dialect
-        (CLAUDE.md §1).
-        """
-        found = {}
-
-        def on_request(request):
-            if path_fragment in request.url and not found:
-                value = request.headers.get(header)
-                if value:
-                    found["token"] = value
-
-        self.page.on("request", on_request)
-        try:
-            self._click_search()
-            deadline = time.time() + 20
-            while time.time() < deadline and "token" not in found:
-                self.page.wait_for_timeout(500)
-        finally:
-            try:
-                self.page.remove_listener("request", on_request)
-            except Exception:                              # noqa: BLE001
-                pass
-        return found.get("token")
-
-    def _click_search(self):
-        """Press the library's own Search button, however it is labelled."""
-        try:
-            self.page.wait_for_timeout(6000)
-            for button in self.page.locator("button").all():
-                try:
-                    if "search" in (button.inner_text() or "").strip().lower():
-                        button.click(timeout=5000)
-                        return True
-                except DriverError:
-                    continue
-        except DriverError:
-            pass
-        return False
 
     def dwell(self, milliseconds: int) -> None:
         """Sit on the current page for a fixed time.
@@ -423,10 +380,9 @@ def _launch_local(pw, args, pool: Optional[ProxyPool]) -> _BrowserSession:
     page = context.new_page()
     if fingerprint is not None:
         _apply_fingerprint(context, page, fingerprint, user_agent)
-    # The `client_version` slot is inherited from the site this core came
-    # from, which states one in its own page. TikTok's profile route takes
-    # no such parameter, so it stays empty rather than carrying a constant
-    # nothing reads (CLAUDE.md §17).
+    # The `client_version` slot is part of the shared session interface.
+    # A TikTok Shop product page takes no such parameter, so it stays
+    # empty rather than carrying a constant nothing reads (CLAUDE.md §17).
     return _BrowserSession(browser, context, page, proxy_url,
                            "", user_agent)
 
@@ -936,11 +892,10 @@ def _rotate_if_per_page(session_box, pw, args, pool, why: str) -> bool:
     than either address alone, so the session is torn down and rebuilt
     rather than having its proxy swapped underneath it.
 
-    Free of mid-run consequences on this route, because there is no chain
-    to break: each account is fetched by its own address and nothing one
-    fetch receives is an input to the next. That is a property of the
-    ROUTE, not a measurement of TikTok's tolerance — the video feed next
-    door refuses every client regardless of how it rotates.
+    Each product is fetched by its own address and nothing one fetch
+    receives is an input to the next, so there is no chain to break; the
+    rebuilt session is warmed again by `_prime_session`, because on this
+    route a cold session is what gets the Security Check.
     """
     if not pool or not pool.rotates_per_page() or len(pool) < 2:
         return False
@@ -966,7 +921,7 @@ def _worker_pool(pool: Optional[ProxyPool], worker_index: int):
 
 
 # ---------------------------------------------------------------------------
-# --mode profile
+# Targets: products
 # ---------------------------------------------------------------------------
 
 

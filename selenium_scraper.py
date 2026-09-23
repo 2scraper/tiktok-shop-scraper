@@ -308,57 +308,6 @@ class _BrowserSession:
         except Exception:
             return ""
 
-    def capture_search_token(self, path_fragment: str, header: str):
-        """Selenium's dialect: CDP performance logs.
-
-        Selenium has no request-event API, so this reads Chrome's own
-        performance log for `Network.requestWillBeSent`. That needs
-        `goog:loggingPrefs` set at launch, which `_launch_local` does —
-        and needs the click to go through `execute_script`, because the
-        library's Search button is not reliably clickable by the WebDriver
-        element click. Measured: an element click captured nothing and a
-        scripted click captured the token.
-        """
-        try:
-            self.driver.execute_cdp_cmd("Network.enable", {})
-        except Exception:                                  # noqa: BLE001
-            pass
-        self._click_search()
-        deadline = time.time() + 20
-        while time.time() < deadline:
-            try:
-                entries = self.driver.get_log("performance")
-            except Exception:                              # noqa: BLE001
-                return None
-            for entry in entries:
-                try:
-                    message = json.loads(entry["message"])["message"]
-                except Exception:                          # noqa: BLE001
-                    continue
-                if message.get("method") != "Network.requestWillBeSent":
-                    continue
-                request = (message.get("params") or {}).get("request") or {}
-                if path_fragment not in request.get("url", ""):
-                    continue
-                headers = {k.lower(): v
-                           for k, v in (request.get("headers") or {}).items()}
-                token = headers.get(header.lower())
-                if token:
-                    return token
-            time.sleep(0.5)
-        return None
-
-    def _click_search(self):
-        try:
-            time.sleep(6)
-            for button in self.driver.find_elements(By.TAG_NAME, "button"):
-                if "search" in (button.text or "").strip().lower():
-                    self.driver.execute_script("arguments[0].click();", button)
-                    return True
-        except Exception:                                  # noqa: BLE001
-            pass
-        return False
-
     def dwell(self, milliseconds: int) -> None:
         time.sleep(milliseconds / 1000.0)
 
@@ -401,12 +350,6 @@ def _launch_local(pw, args, pool: Optional[ProxyPool]) -> _BrowserSession:
 
     proxy_url = pool.current if pool else (args.proxy or None)
     options = ChromeOptions()
-    # Chrome's performance log is how this engine captures the one header
-    # that gates the Ad Library — Selenium has no request-event API, so it
-    # reads `Network.requestWillBeSent` out of the log instead. Without
-    # this capability the log is empty and the token mint fails with a
-    # message about the Search button, which is the wrong place to look.
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     if args.headless:
         options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -884,7 +827,7 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
 
 
 # ---------------------------------------------------------------------------
-# --mode comments
+# Proxy rotation between pages
 # ---------------------------------------------------------------------------
 
 
@@ -903,10 +846,10 @@ def _rotate_if_per_page(session_box, pw, args, pool, why: str) -> bool:
     than either address alone, so the session is torn down and rebuilt
     rather than having its proxy swapped underneath it.
 
-    Safe to do mid-chain on this site, and that is measured rather than
-    assumed: a continuation token fetched by one client was replayed
-    successfully by a bare HTTP client with no cookies at all, so the
-    token is not bound to the session that received it.
+    Each product is fetched by its own address and nothing one fetch
+    receives is an input to the next, so there is no chain to break; the
+    rebuilt session is warmed again by `_prime_session`, because on this
+    route a cold session is what gets the Security Check.
     """
     if not pool or not pool.rotates_per_page() or len(pool) < 2:
         return False
@@ -933,7 +876,7 @@ def _worker_pool(pool: Optional[ProxyPool], worker_index: int):
 
 
 # ---------------------------------------------------------------------------
-# --mode profile
+# Targets: products
 # ---------------------------------------------------------------------------
 
 

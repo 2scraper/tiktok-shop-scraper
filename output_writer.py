@@ -6,47 +6,23 @@ HTTP path.
 
 One mode, one row shape
 -----------------------
-    --mode profile   a TikTok account's public statistics and settings
+    --mode product   one TikTok Shop product page per row
 
-This repo reads one KIND of thing, so it carries one dataclass. Its two
-siblings — tiktok-video-scraper and tiktok-shop-scraper — read different
-kinds and carry their own, and all three keep the family prefix
+This repo reads one KIND of thing, so it carries one dataclass,
+`ShopProduct`. Its siblings — tiktok-profile-scraper,
+tiktok-video-scraper and tiktok-ads-scraper — read different kinds and
+carry their own, and all of them keep the family prefix
 `source, scraped_at, url, sku, title` byte-identical and first
 (CLAUDE.md §9). `mode` is recorded in the run sidecar anyway, so a
-consumer holding three files from three repos can tell them apart without
+consumer holding files from several repos can tell them apart without
 knowing which repo wrote which.
 
-`sku` is the id, as everywhere in this family: here the account's
-permanent numeric id, not its @handle. TikTok lets a user change the
-handle and publishes `uniqueIdModifyTime` to say when they last did, so a
-diff joined on the handle would report a rename as a deletion plus an
-arrival.
+`sku` is the id, as everywhere in this family: here TikTok Shop's product
+id.
 
-Why every count carries its provenance
---------------------------------------
-TikTok publishes each account statistic TWICE and the two disagree.
-Measured 2026-09-22 over 15 captured profiles:
-
-    account        stats.followerCount   statsV2.followerCount   error
-    @tiktok                  95,900,000              95,856,713   +43,287
-    @khaby.lame             163,000,000             162,986,107   +13,893
-    @nasa                     1,800,000               1,785,290   +14,710
-    @charlidamelio          160,200,000             160,206,612   -6,612
-    @zachking                86,900,000              86,900,407      -407
-
-`stats` is rounded to three significant figures and rounds BOTH WAYS, so a
-consumer cannot correct for it and cannot even tell which direction to
-distrust. `statsV2` is exact. Every row records which object it was read
-from in `stats_source`, and `diff_runs.py` reports a count difference that
-comes with a `stats_source` difference as `source_changed` rather than as
-the account having changed — the same argument this family makes for
-`price_source` on its shops.
-
-The counts also MOVE. Nine refetches of one profile within an hour on
-2026-09-22 returned 1,785,290 … 1,785,310 followers, all different, none
-wrong. So a canary asserts a floor and a range, never an equality, and two
-runs of this scraper differing by a few hundred followers is the site
-working rather than a bug.
+Prices move between fetches: two fetches of one listing minutes apart gave
+100.80 and then 94.81. So a canary asserts a range, never an equality, and
+two runs differing on price is the site working rather than a bug.
 
 Everything below the dataclass is row-class-agnostic: pass `row_cls` so an
 empty CSV still gets the right header for the mode that produced it.
@@ -62,10 +38,10 @@ from datetime import datetime, timezone
 from typing import Optional, List, Set, Sequence, Any, Type
 
 
-# The site a row came from. NOT `tiktok.com`: the Ad Library is a
-# separate host with a separate API, separate access rules and a separate
-# scope (the EU/EEA plus six more), and a consumer holding files from all
-# three repos in this family needs to be able to tell them apart by this
+# The site a row came from. NOT `tiktok.com`: TikTok Shop is a separate
+# host with separate access rules — its product pages sit behind a
+# challenge the main site's pages do not — and a consumer holding files
+# from several tiktok-* repos needs to be able to tell them apart by this
 # column alone.
 SOURCE_DEFAULT = "shop.tiktok.com"
 
@@ -76,8 +52,7 @@ def utc_now() -> str:
     One helper so every row in a run can be given the SAME stamp by the
     caller rather than each row calling the clock. Rows from one page that
     disagree in `scraped_at` by a few milliseconds make a diff noisier for
-    no information — and on this site the stamp does more work than usual,
-    because every derived comment date is measured backwards from it.
+    no information.
     """
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -169,7 +144,6 @@ class ShopProduct:
 
 
 Product = ShopProduct
-Advertisement = ShopProduct
 
 
 # Row classes by --mode, so an engine maps its mode to a schema in one
@@ -179,9 +153,9 @@ ROW_CLASS_BY_MODE = {"product": ShopProduct}
 # Modes whose rows are one-per-sku, and therefore safe to dedupe on `sku`
 # and to hand to diff_runs.py.
 #
-# A profile run emits one row per account and an account id is globally
-# unique, so a drop during dedupe means the same handle was asked for
-# twice in one run — worth a log line, never worth silently absorbing.
+# A run emits one row per product and a product id is globally unique, so
+# a drop during dedupe means the same product was asked for twice in one
+# run — worth a log line, never worth silently absorbing.
 UNIQUE_BY_SKU_MODES = ("product",)
 
 
@@ -192,17 +166,10 @@ def dedupe_by_key(rows: Sequence[Any], seen: Set[str], key: str = "sku") -> List
     a repeated page then re-parses without duplicating its rows into the
     final output.
 
-    A drop here is logged rather than quietly applied, because on a live
-    feed it is the site's window moving rather than a fault. Sixty consecutive
-    pages of one video returned 1,200 comment ids and 1,200 distinct ones
-    on 2026-09-21, so adjacent pages do not overlap by design.
+    A drop here is logged rather than quietly applied: on this repo it
+    means the same product was asked for twice in one run, which is worth
+    a log line rather than silent absorption.
 
-    What CAN produce a duplicate is the ranking moving underneath a long
-    run: `--sort top` is a live relevance ordering, and a comment that
-    gains likes between page 3 and page 30 can be served twice. That is a
-    fact about the site worth seeing in a log rather than silently
-    absorbing, and it is also the reason a long run is a sample rather than
-    a snapshot.
     The function stays regardless — it is the backstop that keeps the output
     clean, and "should never fire" is a poor reason to remove a guard that
     costs one pass over a list.
@@ -211,9 +178,9 @@ def dedupe_by_key(rows: Sequence[Any], seen: Set[str], key: str = "sku") -> List
     against, and dropping it would be a silent data loss rather than a
     duplicate removal.
 
-    All three of this repo's modes are one row per `sku`, so `key` is never
-    overridden here — the parameter exists because the rest of the family
-    shares this function and one of them needs it.
+    The one mode this repo has is one row per `sku`, so `key` is never
+    overridden here — the parameter exists because a sibling
+    (tiktok-ads-scraper) dedupes on `row_key`.
     """
     fresh = []
     for r in rows:
@@ -426,10 +393,8 @@ def run_meta(status: str, stop_reason: str, pages_requested: int,
         "pages_requested": pages_requested,
         "pages_completed": pages_completed,
         "pages_failed": pages_failed or [],
-        # Named "products" even though these are job listings, and kept that
-        # way deliberately: every repo in this family writes this key, and a
-        # consumer reading several of them reads one sidecar shape.
-        # quora-scraper made the same call for answers. The row TYPE is
+        # The family's key, kept identical in every repo so a consumer
+        # reading several of them reads one sidecar shape. The row TYPE is
         # `mode` plus `source`, which are right beside it.
         "products": products,
         "start_url": start_url,
@@ -438,7 +403,7 @@ def run_meta(status: str, stop_reason: str, pages_requested: int,
     }
     if extra:
         # Merged rather than nested under a key, so a consumer reads
-        # `shop_rating` at the top level beside `products`. Run fields win a
+        # `products_requested` at the top level beside `products`. Run fields win a
         # name collision: a caller cannot accidentally overwrite `status`.
         meta.update({k: v for k, v in extra.items() if k not in meta})
     return meta
@@ -522,7 +487,7 @@ def finish_run(rows: Sequence[Any], out_prefix: str, fmt: str,
     # list cannot cover a failure that was recorded somewhere else — which
     # is exactly what happened: a run whose top-level pages all arrived
     # stops for `page_cap_reached`, a COMPLETE reason, while
-    # `pages_failed` holds the reply threads that did not. Measured before
+    # `pages_failed` names pages that did not. Measured before
     # the fix: `finish_run(rows, stop_reason="page_cap_reached",
     # pages_failed=[3, 7])` returned exit 0 with `status: complete` and a
     # two-entry `pages_failed` in the same sidecar — a file that
