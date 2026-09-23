@@ -41,6 +41,9 @@ format; SemVer as closely as a CLI toolkit can manage.
 - `.github/ci_checks.py` no longer exempts an `avatar_id` column this repo
   does not have from the credential scan.
 
+- `captcha_solver.py`'s docstring pointed at a "No DataDome solver" section
+  that does not exist in this repo (it came with the copied core). Removed.
+
 ## [0.1.1] — 2026-09-23
 
 > **Correction to v0.1.0.** It described a 2Captcha captcha-solving method
