@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tiktok-shop-scraper"
-version = "0.1.0"
+version = "0.1.1"
 description = "TikTok Shop product scraper: price, discount, sold count, rating, seller and shipping — the one repo in this family where the 2Captcha Scraping Browser is the access rather than a convenience."
 readme = "README.md"
 license = "MIT"

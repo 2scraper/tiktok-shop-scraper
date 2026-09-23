@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Keep a Changelog
 format; SemVer as closely as a CLI toolkit can manage.
 
+## [0.1.1] — 2026-09-23
+
+> **Correction to v0.1.0.** It described a 2Captcha captcha-solving method
+> for TikTok as available and shipped two CLI flags for its parameters.
+> That method is deprecated. Both flags are removed (nothing read them),
+> and the documentation no longer offers it. The challenge policy
+> for the slide puzzle now says `solve: False`, which is what the code
+> already did.
+
 ## [0.1.0] — 2026-09-22
 
 First release. Reads TikTok Shop product listings.
@@ -29,19 +38,11 @@ This is the one repo in the family where a paid product is the access.
 
 ### What is NOT claimed
 
-* 2Captcha DOES implement a TikTok captcha method — verified by calling
-  it, since `method=tiktok` returns `ERROR_TIKTOK` while invented names
-  fall through to the generic image path. Listed at €2.8 per 1000.
-* THIS REPO does not solve the shop's challenge with it. The vendor's way
-  of finding `aid` and `host` hooks `renderCaptcha`, which the shop's SDK
-  never calls. `--captcha-aid` / `--captcha-host` exist so working values
-  need no code change.
+* THIS REPO does not solve the shop's slide puzzle; it implements no
+  solver for ByteDance's captcha. The access is a warmed profile.
 * The Scraping Browser's auto-solve extension does not cover it either:
   sixteen hunters injected, ByteDance's widget untouched, no
   `Captcha.solveFinished` across three routes and 35-second waits.
-
-No money was spent establishing any of this: every rejected task was
-rejected before creation.
 
 ### The marker that cost three live runs
 

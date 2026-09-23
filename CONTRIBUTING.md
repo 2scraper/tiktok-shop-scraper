@@ -58,7 +58,7 @@ so a PR that undoes one fails rather than silently regressing:
 
 - **The challenge appears first and may resolve itself.** The settle loop waits while the page is still the challenge, not merely while it is unreadable. A loop that stopped at the first readable state read the challenge on a session about to be served.
 
-- **This repo does not know the parameters 2Captcha's TikTok method needs for the shop.** `method=tiktok` exists — it answers with its own `ERROR_TIKTOK` — but the vendor's way of finding `aid` and `host` hooks `renderCaptcha`, which the shop's SDK never calls. That is what this repo does not implement, never a claim that the captcha cannot be solved.
+- **This repo implements no solver for the shop's slide puzzle.** The access is a warmed Scraping Browser profile. Write that as what this repo does, never as a claim that the captcha cannot be solved.
 
 - **Prices move.** Two fetches of one listing minutes apart gave 100.80 and 94.81. A price change in `diff_runs.py` is ordinary here.
 
