@@ -3,9 +3,8 @@
 # not required for local development (`pip install` directly is simpler there).
 #
 #   docker build -t tiktok-shop-scraper .
-#   docker run --rm -v "$PWD/out:/out" tiktok-shop-scraper \
-#     --mode comments \
-#     --pages 3 --out /out/software-engineer
+#   docker run --rm -e TIKTOK_CDP_ENDPOINT -v "$PWD/out:/out" tiktok-shop-scraper \
+#     --url 1732432759321694958 --out /out/shop
 #
 # Pass --proxy/--twocaptcha-key the same way as running locally, or mount a
 # .env at /app/.env — nothing here bakes in a credential.

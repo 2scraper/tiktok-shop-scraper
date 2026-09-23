@@ -4,7 +4,7 @@ Shared by all three browser engines and the HTTP path so they cannot
 quietly disagree about whether a response is worth retrying, worth paying
 a solver for, or worth reporting as a block. Three copies of that triage
 drift, and the drift is silent: one engine reporting exit 3 where its twin
-reports exit 0 on the same video (CLAUDE.md §1).
+reports exit 0 on the same product (CLAUDE.md §1).
 
 Policy and pure algorithms only. No JavaScript crosses this boundary —
 Selenium's `execute_script` takes a function BODY with an explicit
@@ -12,38 +12,31 @@ Selenium's `execute_script` takes a function BODY with an explicit
 module that carried a snippet would acquire one driver's dialect. What the
 engines share here is a NAME for an operation and a decision about it.
 
-TikTok answers a request six ways
----------------------------------
-and five of them want a different response, which is why this module
+TikTok Shop answers a request several ways
+------------------------------------------
+and most of them want a different response, which is why this module
 exists on this site at all:
 
     content              a product page with a product on it
     product_unavailable  the shop served a page with no product on it
     challenge            the slide-puzzle captcha — the common case here
-    empty_success      HTTP 200, content-length 0 — a REFUSAL
-    challenge          the slide-puzzle interstitial
-    error              an HTTP status the site gave us
-    parse_error        a page the site served that we failed to read — OUR bug
+    empty_success        HTTP 200, content-length 0 — a REFUSAL
+    waf_challenge        TikTok's WAF "Please wait..." interstitial
+    error                an HTTP status the site gave us
+    parse_error          a page the site served that we failed to read — OUR bug
 
-`empty_success` is the one a naive engine gets wrong, and it is the
-defining shape of this site. Measured 2026-09-22 on the video-feed route
-next door, every way it was asked — headless Chromium, headful Chromium, a
+`empty_success` is the one a naive engine gets wrong. Measured 2026-09-22
+on TikTok's video-feed route (next door to tiktok-video-scraper's routes), every way it was asked — headless Chromium, headful Chromium, a
 Windows user agent, after accepting the EU cookie consent, and through a
 residential exit in Peru — TikTok answered:
 
     HTTP 200   content-type: application/json   content-length: 0
 
 No status to key on, no body to parse, no marker to match. Folded into
-"empty" it reads as an account with no data and the run reports exit 0;
+"empty" it reads as a product with no data and the run reports exit 0;
 named separately it rotates an exit and reports exit 3. This repo's own
 route has not produced it, and it is carried anyway, because the cost of
 being wrong about it is a silent wrong answer.
-
-`video_unavailable` is the other one. A deleted video, a private account
-and an id that never existed all answer HTTP 200 with a full app shell and
-an empty `itemInfo` — a real answer to the question asked, not a block.
-Reporting it as one sends a user rotating proxies over a video that is not
-there.
 """
 
 from __future__ import annotations
@@ -61,8 +54,8 @@ from product_parser import (STATE_CHALLENGE, STATE_CONTENT,
 # Readiness — for the browser engines only
 # ---------------------------------------------------------------------------
 #
-# The browser engines do not read the account out of the DOM — it is in
-# the page SOURCE, in a script tag, server-rendered. So what they wait for
+# The browser engines do not read the product out of the DOM — it is in
+# the page SOURCE, in the router's loader data. So what they wait for
 # is not a rendered grid but a document that has finished arriving. That is
 # a much weaker requirement than most repos in this family have, and
 # stating it here keeps an engine from growing a tile-counting wait that
@@ -71,11 +64,10 @@ from product_parser import (STATE_CHALLENGE, STATE_CONTENT,
 # A run that never sees the selector still works — the payload is parsed
 # out of the source either way — so this is a wait, not a gate.
 #
-# `[data-e2e="user-page"]` is the profile header's own test id, which is a
-# build artefact and therefore listed AFTER nothing more durable exists;
+# `[class*="product"]` and `main` are what a painted product page carries;
 # `body` is the floor that always matches, which is why the minimum is 1
-# rather than the >1 CLAUDE.md §5 requires of a LISTING. A profile page
-# holds exactly one account, so "more than one match" is not a thing that
+# rather than the >1 CLAUDE.md §5 requires of a LISTING. A product page
+# holds exactly one product, so "more than one match" is not a thing that
 # can be waited for here.
 READY_SELECTOR = '[class*="product"], main, body'
 MIN_CARD_MATCHES = 1
@@ -149,20 +141,9 @@ def classify(html, status: Optional[int] = None, url: str = "",
 
 
 STATE_POLICY = {
-    # A profile page with an account on it.
+    # A product page with a product on it.
     STATE_CONTENT: {"retry": False, "solve": False, "blocked": False,
                     "parse": True},
-    # TikTok returned no video. A real, complete answer to the question
-    # asked — EXIT_NO_PRODUCTS, never EXIT_BLOCKED. Retrying it re-asks a
-    # question the site has already answered, and rotating exits over it
-    # spends a proxy budget on a video that is not there.
-    #
-    # `parse` is False because there is nothing to parse; the engine reads
-    # the state itself to distinguish this from a failure when it counts
-    # pages.
-    # The query was answered and matched nothing. A real, complete answer
-    # — EXIT_NO_PRODUCTS, never EXIT_BLOCKED. Retrying re-asks a question
-    # the library has answered.
     # The shop served a page with no product on it: the listing is gone
     # or the id was wrong. A real answer, so EXIT_NO_PRODUCTS rather than
     # EXIT_BLOCKED, and no retry — the question has been answered.
@@ -200,8 +181,8 @@ STATE_POLICY = {
                   "parse": False},
     # A page the site plainly served, with its own assets all over it, that
     # this parser failed to read. OUR bug, and it gets its own name so it
-    # cannot be reported as "no such account" — which would send the
-    # reader to check the handle instead of the parser (CLAUDE.md §20).
+    # cannot be reported as "no such product" — which would send the
+    # reader to check the product id instead of the parser (CLAUDE.md §20).
     # One retry in case a response was truncated, and always worth a dump.
     STATE_PARSE_ERROR: {"retry": True, "solve": False, "blocked": False,
                         "parse": False},
@@ -303,12 +284,10 @@ def pagination_is_addressable(url: str = "", mode: str = "product") -> bool:
 def pages_to_plan(pages_requested: int, pages_available: Optional[int]) -> int:
     """How many pages a run may ask for, given what is known to exist.
 
-    Here `pages_available` is the number of targets `--url` named, and
-    capping at it matters: asking for the eleventh of ten videos is not an
-    empty page, it is an index error waiting to happen.
-
-    Neither route states a page count of its own. The embed window does not
-    say how many videos the account has, and a video page is one video.
+    Here `pages_available` is the number of products `--url` named, and
+    capping at it matters: asking for the eleventh of ten products is not
+    an empty page, it is an index error waiting to happen. A product page
+    is one product, and states no page count of its own.
     """
     wanted = max(1, int(pages_requested or 1))
     if pages_available and pages_available > 0:
@@ -334,19 +313,3 @@ def concurrency_for_mode(mode: str, concurrency: int) -> int:
     configuration measured to work.
     """
     return max(1, int(concurrency or 1))
-
-
-def sample_share(collected: int, total: Optional[int]) -> Optional[float]:
-    """What fraction of an account's videos a run actually holds.
-
-    CLAUDE.md §21: "complete" and "exhaustive" are different words, and on
-    THIS route the gap is the largest in the family. TikTok's Ad Library
-    reports 17,343,646 ads for Germany alone and serves TWELVE per
-    request, so a thorough hundred-page run holds 1,200 of them —
-    0.0069%. A sidecar that says only "complete" is lying by omission, so
-    every run records this figure per region and the closing log prints
-    it.
-    """
-    if not total or total <= 0 or collected < 0:
-        return None
-    return round(100.0 * collected / total, 4)

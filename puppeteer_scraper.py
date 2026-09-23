@@ -420,44 +420,6 @@ class _BrowserSession:
         except Exception:
             return self._url
 
-    def capture_search_token(self, path_fragment: str, header: str):
-        """pyppeteer's dialect of the same operation."""
-        found = {}
-
-        def on_request(request):
-            if path_fragment in request.url and not found:
-                value = (request.headers or {}).get(header)
-                if value:
-                    found["token"] = value
-
-        self.page.on("request", on_request)
-        try:
-            self._click_search()
-            deadline = time.time() + 20
-            while time.time() < deadline and "token" not in found:
-                self.loop.run(asyncio.sleep(0.5))
-        finally:
-            try:
-                self.page.remove_listener("request", on_request)
-            except Exception:                              # noqa: BLE001
-                pass
-        return found.get("token")
-
-    def _click_search(self):
-        try:
-            self.loop.run(asyncio.sleep(6))
-            handles = self.loop.run(self.page.querySelectorAll("button"))
-            for handle in handles:
-                text = self.loop.run(
-                    self.page.evaluate("(el) => el.innerText || ''", handle))
-                if "search" in (text or "").strip().lower():
-                    self.loop.run(self.page.evaluate("(el) => el.click()",
-                                                     handle))
-                    return True
-        except Exception:                                  # noqa: BLE001
-            pass
-        return False
-
     def dwell(self, milliseconds: int) -> None:
         try:
             self.loop.run(asyncio.sleep(milliseconds / 1000.0))
@@ -1077,7 +1039,7 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
 
 
 # ---------------------------------------------------------------------------
-# --mode comments
+# Proxy rotation between pages
 # ---------------------------------------------------------------------------
 
 
@@ -1096,10 +1058,10 @@ def _rotate_if_per_page(session_box, pw, args, pool, why: str) -> bool:
     than either address alone, so the session is torn down and rebuilt
     rather than having its proxy swapped underneath it.
 
-    Safe to do mid-chain on this site, and that is measured rather than
-    assumed: a continuation token fetched by one client was replayed
-    successfully by a bare HTTP client with no cookies at all, so the
-    token is not bound to the session that received it.
+    Each product is fetched by its own address and nothing one fetch
+    receives is an input to the next, so there is no chain to break; the
+    rebuilt session is warmed again by `_prime_session`, because on this
+    route a cold session is what gets the Security Check.
     """
     if not pool or not pool.rotates_per_page() or len(pool) < 2:
         return False
@@ -1126,7 +1088,7 @@ def _worker_pool(pool: Optional[ProxyPool], worker_index: int):
 
 
 # ---------------------------------------------------------------------------
-# --mode profile
+# Targets: products
 # ---------------------------------------------------------------------------
 
 
