@@ -1,4 +1,12 @@
-# tiktokshop-scraper
+# tiktok-shop-scraper
+
+[![release](https://img.shields.io/github/v/release/2scraper/tiktok-shop-scraper?sort=semver)](https://github.com/2scraper/tiktok-shop-scraper/releases)
+[![tests](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml/badge.svg)](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml)
+[![canary](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/canary.yml/badge.svg)](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/canary.yml)
+[![python](https://img.shields.io/badge/python-3.9%20%7C%203.12-blue)](pyproject.toml)
+[![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+[![engines](https://img.shields.io/badge/engines-Playwright%20%7C%20Selenium%20%7C%20pyppeteer%20%7C%20CDP-informational)](#what-it-took-to-get-a-single-product-page)
+[![needs the Scraping Browser API](https://img.shields.io/badge/needs-Scraping%20Browser%20API-orange)](#what-it-took-to-get-a-single-product-page)
 
 Extract TikTok Shop product listings — price and original price, the
 discount, units sold, rating and review count, the seller and their shop

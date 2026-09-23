@@ -447,6 +447,18 @@ def challenge_markers_present(html: Any) -> List[str]:
     return [m for m in BOT_CHALLENGE_MARKERS if m in text]
 
 
+def _coerce_status(status: Any) -> Optional[int]:
+    """An HTTP status as an int, or None — whatever type it arrived as."""
+    if status is None or isinstance(status, bool):
+        return None
+    if isinstance(status, int):
+        return status
+    try:
+        return int(str(status).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def detect_page_state(html: Any, status: Optional[int] = None,
                       url: str = "") -> str:
     """Name what TikTok Shop answered with.
@@ -459,6 +471,13 @@ def detect_page_state(html: Any, status: Optional[int] = None,
     case, and it answers HTTP 200 with a page built out of TikTok's own
     assets — so an asset-count heuristic would call it a served page.
     """
+    # A status can arrive as a STRING. The 2Captcha Scraper API returns the
+    # upstream status as "200", and the first live run of that path crashed
+    # right here with `'>=' not supported between 'str' and 'int'` — exit 1
+    # on the one engine that costs money, invisible to every offline check
+    # because none of them feeds a status the way that service does.
+    # CLAUDE.md §16: run every path a credential gates.
+    status = _coerce_status(status)
     if is_empty_success(status, html):
         return STATE_EMPTY_SUCCESS
 

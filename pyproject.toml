@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tiktokshop-scraper"
+name = "tiktok-shop-scraper"
 version = "0.1.0"
 description = "TikTok Shop product scraper: price, discount, sold count, rating, seller and shipping — the one repo in this family where the 2Captcha Scraping Browser is the access rather than a convenience."
 readme = "README.md"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/2scraper/tiktokshop-scraper"
+Homepage = "https://github.com/2scraper/tiktok-shop-scraper"
 
 # Mirrors requirements-playwright.txt / requirements-puppeteer.txt /
 # requirements-selenium.txt. Install exactly one — see those files for why:

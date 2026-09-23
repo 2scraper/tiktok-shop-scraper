@@ -1,46 +1,20 @@
 """
-youtube-scraper — 2captcha Scraper API edition (fourth engine)
+tiktok-shop-scraper — 2captcha Scraper API edition (fourth engine)
 
 Fetches one page through the 2captcha Scraper API, which renders it on
 2captcha's infrastructure and returns the HTML over plain HTTPS.
 
-What this path can and cannot do HERE, measured
------------------------------------------------
-This is the one engine in this repo that cannot read comments, and the
-reason is a property of the SITE rather than of the service — so it is
-stated with the measurement rather than as an opinion (CLAUDE.md §19).
+What this path does HERE: TikTok Shop products.
 
-YouTube puts no comments in its HTML. The document ships a placeholder and
-the browser then asks for them over a POST to `/youtubei/v1/next`. A
-service that fetches a URL and returns the rendered document therefore
-returns a page whose comment section is still empty. Measured 2026-09-21
-against `/watch?v=dQw4w9WgXcQ`:
+NOT IMPLEMENTED on this route, and deliberately so. The measured way
+past TikTok Shop's challenge is a PERSISTENT Scraping Browser profile that
+has already visited tiktok.com; the Scraper API is a different product that
+fetches a URL per call. This client therefore refuses with that reason. Use
+an engine with --cdp-endpoint.
 
-    no waitFor                      HTTP 200,  1,354,420 bytes,  0 comments
-    waitFor {"state":"networkidle"} HTTP 200,  1,386,808 bytes,  0 comments
-    waitFor {"element":"ytd-comment-thread-renderer","checkVisible":true}
-                                    HTTP 408 timeout — it never appears
-    waitFor {"text":"Top comments"} HTTP 408 timeout
+    python3 scraper_api_client.py --url ...
 
-Control, per CLAUDE.md §20: a deliberately wrong key answered HTTP 401 in
-0.1 s where the real one answered 200 in 6.7 s, so the endpoint is
-evaluating credentials and the 200s above are real work.
-
-So `--mode video` is what this client does, and it does it well: the watch
-document carries the video's whole metadata inline, which is exactly the
-shape a rendered-HTML service is good for. For comments, use one of the
-three browser engines — or nothing at all, because the endpoint they call
-is ungated and free.
-
-And the honest sentence about when to pay for this at all: on this site,
-not for access. Measured the same day from a bare Finnish datacentre
-address with no key and no proxy, 60 consecutive InnerTube pages returned
-1,200 comments with no refusal of any kind. What this client buys is
-somebody else's browser infrastructure and a specific exit country.
-
-    python3 scraper_api_client.py --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-
-    # TWOCAPTCHA_KEY and YOUTUBE_URL are read from .env, so neither needs
+    # TWOCAPTCHA_KEY and TIKTOK_URL are read from .env, so neither needs
     # to be typed — a secret in argv is readable by anything that can run
     # `ps` (CLAUDE.md §3).
 """
@@ -189,7 +163,22 @@ def fetch_html(args) -> str:
 
     body = resp.json()
     html = body.get("body") or ""
-    upstream_status = body.get("status")
+    # The upstream page's status is `http_code`, NOT `status`.
+    #
+    # Measured 2026-09-23 by printing the service's own response body: it
+    # carries `status: "success"` — the TASK's status — and
+    # `http_code: 200`, the status the site answered with. This client
+    # read `status` for as long as this core has existed, so it compared
+    # the word "success" against 400 and crashed on its first live run
+    # (`'>=' not supported between 'str' and 'int'`), while the comment
+    # beneath this line claimed the status was being threaded through.
+    # CLAUDE.md §16: re-read what a remote API actually returns, rather
+    # than what the client's field names imply it returns.
+    raw_status = body.get("http_code")
+    try:
+        upstream_status = int(raw_status) if raw_status is not None else None
+    except (TypeError, ValueError):
+        upstream_status = None
     logger.info("Upstream page status %s, %d bytes of HTML.", upstream_status, len(html))
     # The STATUS is returned alongside the HTML, not thrown away. It used to
     # be, and that cost this engine the family's central distinction. On this
@@ -251,13 +240,10 @@ def _run_once(args, attempt: int = 1, attempts: int = 1) -> int:
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="YouTube scraper — 2captcha Scraper API edition (no "
-                    "local browser). Reads a video's METADATA from the "
-                    "watch document. It cannot read comments: YouTube "
-                    "renders none into its HTML and fetches them over a "
-                    "POST this service does not make — measured, see the "
-                    "module docstring. Use a browser engine for comments; "
-                    "the endpoint they call needs no key at all.")
+        description="tiktok-shop-scraper — 2captcha Scraper API edition (no local "
+                    "browser). Reads TikTok Shop products through the service. See "
+                    "the module docstring for what this path does on this "
+                    "route.")
     # NOT required: prefer the TWOCAPTCHA_KEY env var. A key on the command
     # line is visible to anyone who can run `ps`, and it lands in shell
     # history and in any log that echoes the command line.
@@ -266,18 +252,14 @@ def parse_args():
                         "Defaults to $TWOCAPTCHA_KEY, which is the safer "
                         "way to pass it.")
     p.add_argument("--url", default=None,
-                   help="A YouTube video URL or a bare 11-character video "
-                        "id. Required, unless YOUTUBE_URL is set in the "
-                        "environment or .env.")
-    p.add_argument("--mode", choices=("video",), default="video",
-                   help="Only `video` exists on this path, and the reason "
-                        "is measured rather than a limitation of the "
-                        "service — see the module docstring.")
+                   help="A product id or product URL. Accepted so the refusal can name it; this client does not fetch. Required, unless TIKTOK_URL is "
+                        "set in the environment or .env.")
+    p.add_argument("--mode", choices=("product",), default="product",
+                   help="The one mode this path serves on this route.")
     p.add_argument("--category", default=None,
-                   help="Label to tag the run with in the sidecar. Defaults "
-                        "to the video id.")
+                   help="Label to tag the run with in the sidecar.")
     p.add_argument("--format", choices=["json", "csv", "both"], default="both")
-    p.add_argument("--out", default="youtube_video_scraperapi",
+    p.add_argument("--out", default="tiktok_shop_scraperapi",
                    help="Output file prefix")
     p.add_argument("--timeout", type=int, default=60,
                    help=f"API-side task timeout in seconds "
@@ -288,9 +270,7 @@ def parse_args():
                         "param), e.g. ws://user:pass@host:port")
     wait = p.add_mutually_exclusive_group()
     wait.add_argument("--wait-text", default=None,
-                      help="Wait until this string appears on the page. Note "
-                           "that waiting for anything in the COMMENT section "
-                           "times out on this site: it never renders here.")
+                      help="Wait until this string appears on the page.")
     wait.add_argument("--wait-element", default=None,
                       help="Wait until this CSS selector is visible.")
     wait.add_argument("--wait-state", default=None,
@@ -306,9 +286,9 @@ def parse_args():
 
     args = p.parse_args()
     env_config.apply(args, keys={"TWOCAPTCHA_KEY": "key",
-                                 "YOUTUBE_URL": "url"})
+                                 "TIKTOK_URL": "url"})
     if not args.url:
-        p.error("no --url given, and YOUTUBE_URL is not set in the "
+        p.error("no --url given, and TIKTOK_URL is not set in the "
                 "environment or .env.")
     try:
         parse_target(args.url or "")
