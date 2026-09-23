@@ -32,16 +32,9 @@ CLAUDE.md §19 is explicit that "unsolvable" is a property of a PAGE and
 never of a vendor, and that the only sentence a repo may write about a
 solver is what the REPO does. So, precisely:
 
-  * 2Captcha DOES implement a TikTok captcha method. Verified by calling
-    it: `method=tiktok` returns its own error (`ERROR_TIKTOK`), while
-    invented names fall through to the generic image path. The product
-    page lists it at EUR 2.8 per 1000.
-  * THIS REPO does not solve the shop's challenge with it. Every
-    parameter combination tried was rejected, and the vendor's documented
-    way of discovering `aid` and `host` — hooking `renderCaptcha` — does
-    not apply, because the shop's SDK (`oec-ttweb-captcha`) never calls
-    that function. `--captcha-aid` and `--captcha-host` exist so that
-    working values can be supplied without a code change.
+  * THIS REPO does not solve the shop's slide puzzle. It implements no
+    solver for ByteDance's captcha (`oec-ttweb-captcha`, verification endpoint
+    `api-verification.tiktokshop.com`); the access is a warmed profile.
   * The Scraping Browser's own auto-solve extension does not cover it
     either: it injected all sixteen of its hunters into the challenge page
     and left ByteDance's captcha untouched, `Captcha.setAutoSolve`

@@ -168,18 +168,11 @@ STATE_POLICY = {
     # EXIT_BLOCKED, and no retry — the question has been answered.
     STATE_PRODUCT_UNAVAILABLE: {"retry": False, "solve": False,
                                 "blocked": False, "parse": False},
-    # The slide-puzzle interstitial. Solvable, and the one place in this
-    # family of three repos where 2Captcha's solver is load-bearing —
-    # though not on THIS route: it has been observed on TikTok Shop, which
-    # is tiktok-shop-scraper's problem. Carried here as readiness.
-    # The slide-puzzle challenge, and on THIS route it is the common case
-    # rather than a readiness. `solve` is True because the path is wired —
-    # but read the README before believing a solve will happen: 2Captcha
-    # implements a TikTok method and this repo does not know the `aid` and
-    # `host` the shop's challenge wants, so a solve attempt is expected to
-    # be rejected rather than to cost money. `retry` and `blocked` are
-    # both True: a different profile is what has actually worked.
-    STATE_CHALLENGE: {"retry": True, "solve": True, "blocked": True,
+    # The slide-puzzle interstitial. `solve` is False: this repo implements
+    # no solver for ByteDance's puzzle, so a solve on this state would be a
+    # promise with nothing behind it. `retry` and `blocked` are True: a
+    # different profile is what has actually worked (tiktok-shop-scraper).
+    STATE_CHALLENGE: {"retry": True, "solve": False, "blocked": True,
                       "parse": False},
     # TikTok's zero-byte HTTP 200 — a refusal wearing a success. Carried
     # here as readiness: the shop route has not produced it, but the

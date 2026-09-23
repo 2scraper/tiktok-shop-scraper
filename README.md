@@ -63,19 +63,10 @@ changed.
 This matters enough to state precisely, because the easiest thing to write
 would be wrong.
 
-* **2Captcha does implement a TikTok captcha method.** Verified by calling
-  it: `method=tiktok` returns its own error (`ERROR_TIKTOK`, "one of the
-  parameters is incorrect") while invented names like `tiktok_captcha`
-  fall through to the generic image path. The product page lists it at
-  **€2.8 per 1000**.
-* **This repo does not solve the shop's challenge with it.** Every
-  parameter combination tried was rejected, and the vendor's documented
-  way of discovering `aid` and `host` — redefining `renderCaptcha` in the
-  console — does not apply here: the shop's SDK (`oec-ttweb-captcha`)
-  never calls that function. Its verification endpoint is
-  `api-verification.tiktokshop.com` with `aid=0`.
-  `--captcha-aid` and `--captcha-host` exist so that working values can be
-  supplied without a code change.
+* **This repo does not solve the shop's slide puzzle.** It implements no
+  solver for ByteDance's captcha (`oec-ttweb-captcha`, verification endpoint
+  `api-verification.tiktokshop.com`). What gets a run in is a Scraping
+  Browser profile that has already visited tiktok.com — see the table above.
 * **The Scraping Browser's auto-solve extension does not cover it
   either.** It injected all sixteen of its hunters into the challenge page
   — turnstile, recaptcha, arkose, geetest, amazon_waf and the rest — and

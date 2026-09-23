@@ -38,14 +38,8 @@ What this repo does NOT claim about the solver
 CLAUDE.md §19: "unsolvable" is a property of a PAGE, never of a vendor,
 and the only sentence a repo may write is what the REPO does.
 
-  * 2Captcha DOES implement a TikTok captcha method — verified by calling
-    it, since `method=tiktok` returns its own `ERROR_TIKTOK` while
-    invented names fall through to the generic image path.
-  * THIS REPO does not solve the shop's challenge with it. The vendor's
-    documented way of finding `aid` and `host` hooks `renderCaptcha`,
-    which the shop's SDK never calls, and every value tried was rejected.
-    `--captcha-aid` and `--captcha-host` exist so working values need no
-    code change.
+  * THIS REPO does not solve the shop's slide puzzle. It implements no
+    solver for ByteDance's captcha; the access is a warmed profile.
   * The Scraping Browser's auto-solve extension does not cover it either:
     all sixteen hunters injected, ByteDance's captcha untouched, no
     `Captcha.solveFinished` across three routes and 35-second waits.
@@ -1267,16 +1261,6 @@ def parse_args(argv: Optional[List[str]] = None):
     p.add_argument("--captcha-api", choices=("v1", "v2"), default="v2")
     p.add_argument("--solve-captcha", choices=("never", "when-blocked", "always"),
                    default="when-blocked")
-    p.add_argument("--captcha-aid", default=None,
-                   help="The `aid` the 2Captcha TikTok method wants. NOT "
-                        "known for the shop's challenge: the vendor's way of "
-                        "finding it is to hook `renderCaptcha`, which the "
-                        "shop's SDK never calls, and every value tried was "
-                        "rejected with ERROR_TIKTOK. Exposed so a working "
-                        "value can be supplied without a code change.")
-    p.add_argument("--captcha-host", default=None,
-                   help="The `host` the 2Captcha TikTok method wants. See "
-                        "--captcha-aid.")
     p.add_argument("--min-score", type=float, default=0.3)
     p.add_argument("--transport", choices=("auto", "http", "browser"),
                    default="browser",

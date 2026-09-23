@@ -123,8 +123,7 @@ CONTRACT_FLAGS = {
 # This repo's own addition. `--transport` exists because the profile page is
 # server-rendered and a browser buys nothing on it, so the default is plain
 # HTTP and the browser is a fallback rather than the engine.
-SITE_FLAGS = {"--transport", "--warm", "--no-warm",
-              "--captcha-aid", "--captcha-host"}
+SITE_FLAGS = {"--transport", "--warm", "--no-warm"}
 
 # CLAUDE.md §12, and ASSEMBLED from pieces rather than written out — which
 # is what lets the scan cover this file too. Three sibling repos exempted
@@ -373,7 +372,7 @@ def _tree_state():
 def _fault_args(engine, **overrides):
     """Arguments for a fault-injection run, with no network in them."""
     base = dict(url="1732432759321694958", mode="product", warm=False,
-                captcha_aid=None, captcha_host=None, pages=1, locale="en",
+                pages=1, locale="en",
                 delay=0,
                 retries=0, retry_delay=0, solve_captcha="never",
                 dump_html=False, out="unused", concurrency=1,
@@ -496,10 +495,26 @@ def check_the_access_story_is_stated_and_not_assumed():
           "CLAUDE.md §19: unsolvable is a property of a PAGE, never of a "
           "vendor, and the only sentence a repo may write is what the "
           "REPO does")
-    check("...and says what 2Captcha DOES implement",
-          "ERROR_TIKTOK" in readme or "method=tiktok" in readme,
-          "a claim about a vendor's capability that cites no measurement "
-          "is a guess wearing a fact's clothes")
+    # The deprecated TikTok solving method must not come back through the
+    # docs or the CLI. Assembled from pieces so this file does not match
+    # its own scan.
+    stale = ("method=" + "tiktok", "ERROR_" + "TIKTOK",
+             "--captcha-" + "aid", "--captcha-" + "host")
+    offenders = []
+    for root, dirs, files in os.walk(HERE):
+        # Hidden directories are skipped: .git, virtualenvs, and nested
+        # worktrees (.claude/worktrees) are someone else's checkout.
+        dirs[:] = [x for x in dirs if not x.startswith(".")
+                   and x != "__pycache__"]
+        for name in files:
+            if not name.endswith((".py", ".md", ".yml", ".example", ".toml")):
+                continue
+            path = os.path.join(root, name)
+            text = open(path, encoding="utf-8", errors="replace").read()
+            offenders += ["%s: %s" % (os.path.relpath(path, HERE), t)
+                          for t in stale if t in text]
+    check("...and nowhere offers the deprecated TikTok solving method",
+          not offenders, "; ".join(offenders))
 
     for module in ENGINES:
         src = open(os.path.join(HERE, module + ".py"), encoding="utf-8").read()
@@ -508,9 +523,6 @@ def check_the_access_story_is_stated_and_not_assumed():
               "a refusal would also stop anyone discovering that the site "
               "had changed (CLAUDE.md §7's rule for concurrency, applied "
               "to access)")
-        check("%s exposes the captcha parameters it does not know" % module,
-              "captcha-aid" in src and "captcha-host" in src,
-              "so a working value needs no code change")
 
 
 def check_warming_is_a_dwell_and_not_a_readiness_wait():
