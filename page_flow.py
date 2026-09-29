@@ -47,6 +47,7 @@ from typing import Callable, Optional
 from product_parser import (STATE_CHALLENGE, STATE_CONTENT,
                             STATE_EMPTY_SUCCESS, STATE_ERROR,
                             STATE_PARSE_ERROR, STATE_PRODUCT_UNAVAILABLE,
+                            STATE_RISK_REFUSED,
                             STATE_UNKNOWN, STATE_WAF_CHALLENGE,
                             detect_page_state)
 
@@ -153,6 +154,12 @@ STATE_POLICY = {
     # no solver for ByteDance's puzzle, so a solve on this state would be a
     # promise with nothing behind it. `retry` and `blocked` are True: a
     # different profile is what has actually worked (tiktok-shop-scraper).
+    # TikTok's risk landing page (see product_parser.detect_page_state):
+    # the product frame was withheld from THIS client. Blocked, so a retry
+    # rotates when a pool allows it; nothing to solve, since the page
+    # carries no widget. Measured on two captures, both local browsers.
+    STATE_RISK_REFUSED: {"retry": True, "solve": False, "blocked": True,
+                         "parse": False},
     STATE_CHALLENGE: {"retry": True, "solve": False, "blocked": True,
                       "parse": False},
     # TikTok's zero-byte HTTP 200 — a refusal wearing a success. Carried

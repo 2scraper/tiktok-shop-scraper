@@ -126,6 +126,18 @@ def parse_target(raw: str) -> str:
         f"a URL like https://{SHOP_HOST}/view/product/1732432759321694958")
 
 
+def requested_region(raw: str) -> Optional[str]:
+    """The country a `/{cc}/pdp/…` URL names, if it names one.
+
+    Only ever REPORTED, never used to build the fetch: the address this
+    repo fetches is /view/product/{id}, the one measured working, and the
+    market is decided by the exit (see `market`). A caller who typed
+    /gb/pdp/… is told that rather than silently served another market.
+    """
+    m = re.search(r"/([a-z]{2})/pdp(?:/|$)", str(raw or "").lower())
+    return m.group(1).upper() if m else None
+
+
 def product_url(product_id: str, region: str = "") -> str:
     if not _PRODUCT_ID_RE.match(str(product_id)):
         raise NotAProductUrl(f"{product_id!r} is not a TikTok Shop product id")
@@ -171,6 +183,57 @@ def _page_node(data: Dict[str, Any]) -> Dict[str, Any]:
             return value
     raise PayloadError(
         f"router payload carried no page node (keys: {sorted(loader)[:4]})")
+
+
+def product_error_code(page: Dict[str, Any]) -> Optional[int]:
+    """The site's own "this product does not exist" code, if it sent one.
+
+    A component's `error_code` beside `error_message` — measured
+    23002002 / "get product detail not exist" on both captured missing
+    products, whose page also reads "Product not available in this country
+    or region": so a missing product may be a MARKET answer, and the log
+    says so rather than calling the product deleted.
+    """
+    config = page.get("page_config") or {}
+    for component in config.get("components_map") or []:
+        data = (component or {}).get("component_data") \
+            if isinstance(component, dict) else None
+        if isinstance(data, dict) and data.get("error_code"):
+            return _int(data.get("error_code"))
+    return None
+
+
+def _any_frame(data: Dict[str, Any]) -> Dict[str, Any]:
+    """The loader entry carrying `basic_info`, whatever else it holds."""
+    for value in (data.get("loaderData") or {}).values():
+        if isinstance(value, dict) and "basic_info" in value:
+            return value
+    return {}
+
+
+def market(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Which market answered, as the page's own `region_info` states it.
+
+    Measured on the served capture: a request for /view/product/{id} was
+    301'd to /us/pdp/{slug}/{id} with sale_region, ip_region and
+    path_region all "US" and real_region_source "SALE_REGION". So the
+    market is the SITE's statement about this response, and the URL a
+    caller typed is only a request for one (CLAUDE.md §20: the Scraping
+    Browser's country segment wins over the path).
+    """
+    frame = _any_frame(data)
+    info = frame.get("region_info") or {}
+    route = frame.get("route_info") or {}
+    out = {k: _clean(info.get(k)) for k in
+           ("sale_region", "ip_region", "path_region", "real_region",
+            "real_region_source")}
+    out["canonical_url"] = _clean(route.get("canonical_url"))
+    return {k: v for k, v in out.items() if v}
+
+
+def risk_level(page: Dict[str, Any]) -> Optional[str]:
+    """TikTok's own risk verdict on the client, as the page states it."""
+    return _clean((page.get("basic_info") or {}).get("risk_level"))
 
 
 def _product_component(page: Dict[str, Any]) -> Dict[str, Any]:
@@ -291,6 +354,7 @@ def parse_product(html: Any, url: str, scraped_at: str,
         "site_says_bot": _bool(bot.get("is_bot")),
         "site_risk_level": _clean(basic.get("risk_level")),
         "waf_type": (page.get("waf_decision") or {}).get("waf_type"),
+        "market": market(data) or None,
     }
 
     component = _product_component(page)
@@ -371,7 +435,12 @@ def parse_product(html: Any, url: str, scraped_at: str,
 
         product_id=product_id,
         seller_id=_clean(model.get("seller_id")) or _clean(shop.get("seller_id")),
-        region=_clean(basic.get("lang")),
+        # The MARKET that answered, as the shop states it — never the
+        # language: this column read `basic_info.lang` and said "en-US"
+        # for a US listing (audit 2026-09-29 #6). A language is not a
+        # country, and a German-language page can be served to any market.
+        region=_clean(shop.get("region"))
+               or (diag.get("market") or {}).get("sale_region"),
 
         price=price, original_price=original,
         currency=_clean(price_block.get("currency_name")),
@@ -420,6 +489,9 @@ STATE_CONTENT = "content"
 STATE_CHALLENGE = "challenge"
 STATE_WAF_CHALLENGE = "waf_challenge"
 STATE_PRODUCT_UNAVAILABLE = "product_unavailable"
+# TikTok's risk landing page: a shop frame with no product and a risk
+# verdict above "low" on the client. A refusal, not an absence.
+STATE_RISK_REFUSED = "risk_refused"
 STATE_EMPTY_SUCCESS = "empty_success"
 STATE_ERROR = "error"
 STATE_PARSE_ERROR = "parse_error"
@@ -489,12 +561,34 @@ def detect_page_state(html: Any, status: Optional[int] = None,
     if data is not None:
         try:
             page = _page_node(data)
+        except PayloadError:
+            # No page config at all. Both captures of this shape are
+            # TikTok's risk frame (basic_info, bot_info, waf_decision and
+            # nothing else), so the verdict is read from the frame itself.
+            frame = _any_frame(data)
+            if risk_level(frame) not in (None, "", "low"):
+                return STATE_RISK_REFUSED
+            return STATE_PARSE_ERROR
+        try:
             _product_component(page)
             return STATE_CONTENT
         except PayloadError:
-            # A shop page this parser understood the frame of, with no
-            # product in it: the product is gone, or the id was wrong.
+            pass
+        # "No product in this frame" is three different answers, and only
+        # one of them is the product being gone. Counted on the captures
+        # 2026-09-29 (audit #6): the two real missing products carry the
+        # site's own `error_code` 23002002, "get product detail not exist",
+        # on the product route with risk_level "low"; the two pages this
+        # parser used to call missing are a DIFFERENT route (a landing
+        # page) with risk_level "medium" and a risk-reason code — TikTok
+        # declining the client, not the product being absent. Anything
+        # else is a frame this parser does not know: its failure, not an
+        # empty answer (CLAUDE.md §20).
+        if product_error_code(page) is not None:
             return STATE_PRODUCT_UNAVAILABLE
+        if risk_level(page) not in (None, "", "low"):
+            return STATE_RISK_REFUSED
+        return STATE_PARSE_ERROR
 
     if asset_reference_count(text) >= MIN_ASSET_REFERENCES:
         return STATE_PARSE_ERROR

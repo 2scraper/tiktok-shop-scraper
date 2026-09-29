@@ -134,6 +134,17 @@ def trim(html: str) -> dict:
         _slim_images(model)
     slim_page = {k: page.get(k) for k in
                  ("basic_info", "bot_info", "waf_decision") if k in page}
+    # The market the page says answered — only the fields `market()` reads:
+    # region codes and the canonical address, no session material.
+    info = page.get("region_info") or {}
+    market = {k: info[k] for k in ("sale_region", "ip_region", "path_region",
+                                   "real_region", "real_region_source")
+              if k in info}
+    if market:
+        slim_page["region_info"] = market
+    canonical = (page.get("route_info") or {}).get("canonical_url")
+    if canonical:
+        slim_page["route_info"] = {"canonical_url": canonical}
     slim_page["page_config"] = {"components_map": [{"component_data": component}]}
     payload = {"loaderData":
                {"(region)/pdp/(product_name_slug$)/(product_id)/page":

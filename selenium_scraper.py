@@ -75,7 +75,7 @@ import page_flow
 from page_flow import SolveBudget
 from http_transport import HttpSession, TransportError
 import product_parser as parser
-from product_parser import (NotAProductUrl, STATE_CHALLENGE,
+from product_parser import (requested_region, NotAProductUrl, STATE_CHALLENGE,
                             STATE_CONTENT, STATE_EMPTY_SUCCESS,
                             STATE_PRODUCT_UNAVAILABLE, STATE_UNKNOWN,
                             detect_page_state, parse_product, parse_target,
@@ -737,7 +737,11 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
     status = payload = None
     state = STATE_UNKNOWN
 
-    for attempt in range(1, attempts + 1):
+    # A while rather than a for: switching transport below grants
+    # one more attempt, and range() is fixed when the loop starts.
+    attempt = 0
+    while attempt < attempts:
+        attempt += 1
         session = session_box["session"]
         # First of the two solve call sites: clear a challenge BEFORE the
         # answer is judged, so a gated page is not classified on its
@@ -796,6 +800,11 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
                 session_box["session"] = _open_session(pw, args, pool)
                 _prime_session(session_box["session"], args,
                                session_box["prime_url"])
+                # The switch is not a retry: it is the same page asked
+                # through the transport that can answer it. Without the
+                # extra attempt, `--retries 0` started a browser and
+                # never asked it for the page (audit 2026-09-29).
+                attempts += 1
                 continue
             # Second call site, same budget.
             if page_flow.should_solve(state):
@@ -823,7 +832,14 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
                     label, state, attempt, attempts - 1, args.retry_delay)
         time.sleep(args.retry_delay)
 
-    return status, payload, state, blocked_seen
+    # `blocked` means the page ENDED refused, not that a refusal was met
+    # on the way: a retry that got the content is a recovered page.
+    # Reporting it as blocked turned a complete run into exit 6 /
+    # stop_reason blocked with pages_failed [] — measured live on
+    # 2026-09-29, pyppeteer, @nasa: one empty HTTP 200, then the
+    # profile, then "partial".
+    return (status, payload, state,
+            blocked_seen and not page_flow.should_parse(state))
 
 
 # ---------------------------------------------------------------------------
@@ -884,6 +900,9 @@ def _worker_pool(pool: Optional[ProxyPool], worker_index: int):
 
 
 
+_REGION_WARNED: set = set()
+
+
 def _targets(args) -> List[str]:
     """`--url` to a list of product ids, refusing each bad one by name."""
     out, seen = [], set()
@@ -892,6 +911,15 @@ def _targets(args) -> List[str]:
         if not part:
             continue
         pid = parse_target(part)
+        asked = requested_region(part)
+        # `_targets` is read more than once per run; say it once.
+        if asked and (pid, asked) not in _REGION_WARNED:
+            _REGION_WARNED.add((pid, asked))
+            logger.warning("Product %s: the URL names the %s market, but the "
+                           "market is decided by the EXIT, not the path "
+                           "(--cdp-endpoint's country- segment). The sidecar "
+                           "records which market answered, under verdicts.",
+                           pid, asked)
         if pid in seen:
             logger.info("Product %s named twice; fetching it once.", pid)
             continue
@@ -986,6 +1014,8 @@ def _run_product(session_box, pw, args, pool) -> Tuple[List[Any], Dict[str, Any]
                 verdicts[product_id] = {
                     "is_bot": outcome.diagnostics.get("site_says_bot"),
                     "risk_level": outcome.diagnostics.get("site_risk_level"),
+                    # Which market ANSWERED, as the page states it.
+                    "market": outcome.diagnostics.get("market"),
                 }
         else:
             failed.append(outcome.number)

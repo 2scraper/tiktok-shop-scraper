@@ -689,11 +689,25 @@ def check_the_row_schema():
 
 def check_a_missing_product_is_not_a_block():
     """A shop page with no product on it is a real answer."""
+    # The site's own signal, trimmed verbatim from a capture of a product
+    # that does not exist (2026-09-22): a component carrying `error_code`.
+    # Until 2026-09-29 ANY frame without a product read as unavailable,
+    # including a hand-made empty one — which is what a frontend change
+    # would look like too (audit #6). Now the absence must be STATED.
     empty = ('<script type="application/json" id="__MODERN_ROUTER_DATA__">'
-             '{"loaderData":{"x":{"page_config":{"components_map":[]}}}}'
+             '{"loaderData":{"x":{"basic_info":{"risk_level":"low"},'
+             '"page_config":{"components_map":[{"component_data":'
+             '{"error_code":23002002,"error_message":'
+             '"get product detail not exist"}}]}}}}'
              "</script>")
     equal("it has its own state", product_parser.detect_page_state(empty, 200),
           product_parser.STATE_PRODUCT_UNAVAILABLE)
+    unstated = ('<script type="application/json" id="__MODERN_ROUTER_DATA__">'
+                '{"loaderData":{"x":{"page_config":{"components_map":[]}}}}'
+                "</script>")
+    equal("a product-less frame with no stated reason is OUR parse error",
+          product_parser.detect_page_state(unstated, 200),
+          product_parser.STATE_PARSE_ERROR)
     state = product_parser.STATE_PRODUCT_UNAVAILABLE
     for probe in (page_flow.counts_as_blocked, page_flow.should_retry,
                   page_flow.should_solve, page_flow.should_parse):
@@ -1882,10 +1896,11 @@ def check_a_site_that_answered_is_not_a_run_that_failed():
 
     # The states themselves must still classify the way the parser says,
     # or the stop reasons above would never be reached.
-    equal("a product-less shop page still classifies as such",
+    equal("a product the site says does not exist still classifies as such",
           product_parser.detect_page_state(
               '<script type="application/json" id="__MODERN_ROUTER_DATA__">'
-              '{"loaderData":{"x":{"page_config":{"components_map":[]}}}}'
+              '{"loaderData":{"x":{"page_config":{"components_map":'
+              '[{"component_data":{"error_code":23002002}}]}}}}'
               "</script>", 200),
           product_parser.STATE_PRODUCT_UNAVAILABLE)
     equal("and the zero-byte 200 does not",
@@ -2476,6 +2491,109 @@ def check_scraper_api_waitfor_is_object_and_status_is_http_code():
     check(f"Scraper API: the status handed onward must be the target's "
           f"http_code 403 (int), not the API's own verdict, got {status!r}",
           status == 403 and isinstance(status, int))
+
+
+def check_a_recovered_page_is_not_blocked_and_a_transport_switch_refetches():
+    """Audit 2026-09-29 #4, both halves reproduced before the fix.
+
+    * `blocked` was set by ANY refusal met on the way and never cleared, so
+      a retry that got the page still reported it blocked: measured live,
+      pyppeteer @nasa — one empty HTTP 200, then the profile, then exit 6
+      with stop_reason blocked and pages_failed [].
+    * the HTTP -> browser switch spent a `--retries` attempt, so with
+      `--retries 0` a browser started and was never asked for the page.
+    """
+    blocked_state = next(
+        s for s in page_flow.STATE_POLICY
+        if page_flow.counts_as_blocked(s) and page_flow.should_retry(s))
+    content = product_parser.STATE_CONTENT
+    for name in ENGINES:
+        engine = _import_engine(name)
+        if engine is None:
+            skip(name, "engine library absent")
+            continue
+
+        class FakeHttp(engine.HttpSession):
+            def __init__(self):
+                self.proxy_url = None
+
+            def close(self):
+                pass
+
+        class FakeBrowser:
+            proxy_url = None
+
+            def close(self):
+                pass
+
+        def run(sequence, **overrides):
+            answers = list(sequence)
+            calls = []
+
+            def fake_call(session, args, url, *rest):
+                calls.append(type(session).__name__)
+                return 200, "<html></html>", answers.pop(0)
+
+            saved = (engine._call, engine._open_session, engine._prime_session)
+            engine._call = fake_call
+            engine._open_session = lambda pw, args, pool: FakeBrowser()
+            engine._prime_session = lambda session, args, url: 200
+            try:
+                args = _fault_args(engine, **overrides)
+                box = {"session": FakeHttp() if args.transport == "auto"
+                       else FakeBrowser(), "prime_url": "u"}
+                extra = ({},) if "body" in inspect.signature(
+                    engine._fetch_with_policy).parameters else ()
+                out = engine._fetch_with_policy(box, None, args, None, "u",
+                                                *extra, "label")
+            finally:
+                (engine._call, engine._open_session,
+                 engine._prime_session) = saved
+            return out, calls
+
+        (_, _, state, blocked), _ = run([blocked_state, content], retries=1)
+        equal("%s: a refusal then the page ends as content" % name,
+              state, content)
+        equal("%s: ...and is not reported blocked" % name, blocked, False)
+        (_, _, state, blocked), _ = run([blocked_state], retries=0)
+        equal("%s: a page that ENDS refused is still blocked" % name,
+              blocked, True)
+        (_, _, state, blocked), calls = run([blocked_state, content],
+                                            retries=0, transport="auto")
+        equal("%s: with --retries 0 the switch still asks the browser"
+              % name, calls, ["FakeHttp", "FakeBrowser"])
+        equal("%s: ...and gets the page" % name, (state, blocked),
+              (content, False))
+
+
+def check_the_risk_frame_region_and_market_are_what_the_site_states():
+    """Audit 2026-09-29 #6, and what counting the captures added to it.
+
+    * `region` read `basic_info.lang` and said "en-US" — a language — for
+      a US listing. It is now the shop's own `region`.
+    * a frame with no page config and risk_level "medium" (both captures
+      of it were TikTok declining the client) read as "product does not
+      exist"; it is a refusal.
+    * which market answered is the page's own `region_info`, recorded per
+      product, because the URL a caller typed is only a request for one.
+    """
+    rows, diag = product_parser.parse_product(page("product"), "u", "T",
+                                              output_writer.ShopProduct)
+    equal("region is the market, not the language", rows[0].region, "US")
+    equal("...and the sidecar gets the market the page states",
+          (diag.get("market") or {}).get("sale_region"), "US")
+    risk = ('<script type="application/json" id="__MODERN_ROUTER_DATA__">'
+            '{"loaderData":{"x":{"basic_info":{"risk_level":"medium",'
+            '"risk_reasons":"1028"},"bot_info":{"is_bot":false},'
+            '"waf_decision":{"waf_type":2}}}}</script>')
+    equal("TikTok's risk frame is a refusal, not a missing product",
+          product_parser.detect_page_state(risk, 200),
+          product_parser.STATE_RISK_REFUSED)
+    check("...which the policy treats as blocked",
+          page_flow.counts_as_blocked(product_parser.STATE_RISK_REFUSED))
+    equal("a regional URL is reported, not used to build the fetch",
+          product_parser.requested_region(
+              "https://shop.tiktok.com/gb/pdp/x/1732432759321694958"), "GB")
 
 
 CHECKS = [v for k, v in sorted(globals().items()) if k.startswith("check_")

@@ -2,7 +2,7 @@
 
 [![release](https://img.shields.io/github/v/release/2scraper/tiktok-shop-scraper?sort=semver)](https://github.com/2scraper/tiktok-shop-scraper/releases)
 [![tests](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml/badge.svg)](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml)
-[![canary](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/canary.yml/badge.svg)](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/canary.yml)
+[![canary](https://img.shields.io/badge/canary-skipped%20without%20a%20CDP%20profile-lightgrey)](#the-canary)
 [![python](https://img.shields.io/badge/python-3.9%20%7C%203.12-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 [![engines](https://img.shields.io/badge/engines-Playwright%20%7C%20Selenium%20%7C%20pyppeteer%20%7C%20CDP-informational)](#what-it-took-to-get-a-single-product-page)
@@ -50,6 +50,12 @@ tiktok.com before the first product.
     --url 1732432759321694958 \
     --cdp-endpoint "ws://{login}-zone-scraping_browser-country-us-pid-{profileId}:{password}@cb.2captcha.com:9222"
 ```
+
+**One clone, one virtualenv.** The four tiktok-* repos share top-level
+module names (`product_parser`, `output_writer`, `playwright_scraper`, …),
+so `pip install .` of two of them into one environment makes the second
+silently replace the first. The commands above never do that — keep it
+that way, and give each repo its own venv.
 
 Without `--cdp-endpoint` the run **warns and tries anyway**, and will
 almost certainly exit 3. It is a warning rather than a refusal on purpose:
@@ -157,13 +163,17 @@ pins that the two fixtures really do differ.
 | 0 | ok |
 | 1 | crash |
 | 2 | bad usage |
-| 3 | blocked — the challenge |
-| 4 | zero products, including "the shop served a page with no product on it" |
+| 3 | blocked — the challenge, or TikTok's risk frame (a page with a risk verdict and no product) |
+| 4 | zero products — the shop SAID the product does not exist (its own `error_code`; the page reads "not available in this country or region") |
 | 5 | the content was never obtained |
 | 6 | partial |
 
 **A run that finds nothing writes nothing.** `--allow-empty` is the
-opt-out. A challenged run exits 3 and leaves the previous good output in
+opt-out. `region` is the market that ANSWERED, as the shop states it, and
+the sidecar records that page's own `region_info` per product; a
+`/gb/pdp/…` URL is fetched as `/view/product/{id}`, and the market is
+decided by the exit (`--cdp-endpoint`'s `country-`), not the path — the run
+says so rather than silently serving another market. A challenged run exits 3 and leaves the previous good output in
 place — which the first live run of this engine did correctly while the
 marker set was still wrong, and that is the contract working.
 
@@ -189,6 +199,14 @@ Unlike its three siblings, this repo's canary **skips without a secret**
 and says so with a `::notice::`. It cannot be otherwise: the access is a
 Scraping Browser profile, and a canary that ran without one would be red
 every morning — which teaches everyone to ignore checks.
+
+So its badge above is a fixed grey one rather than the workflow's own:
+that workflow goes GREEN when it skips, and a green canary badge reads as
+"the shop was scraped this morning", which it was not. A scheduled
+positive canary is not on offer either: a Scraping Browser profile's
+credentials last about a day, so a stored secret would be stale by the
+next run. Dispatch it by hand with a fresh `TIKTOK_CDP_ENDPOINT` secret
+when you need the evidence.
 
 ---
 

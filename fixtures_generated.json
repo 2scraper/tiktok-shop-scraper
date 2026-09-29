@@ -1726,6 +1726,16 @@
         }
        ]
       },
+      "region_info": {
+       "ip_region": "US",
+       "path_region": "US",
+       "real_region": "US",
+       "real_region_source": "SALE_REGION",
+       "sale_region": "US"
+      },
+      "route_info": {
+       "canonical_url": "https://shop.tiktok.com/us/pdp/fuffi-4g-smartphone-dual-sim-6-8-inch-hd-6gb-ram-64gb-storage/1732432759321694958"
+      },
       "waf_decision": {
        "dkms_token": "MIIBDwQMXJdMpzAZzaWHrSLgBIHsd+fPupmYjXauw5/ujVT8xoSNyeJ0meK/fN9/FGhWE45WMpeHZ/woqGGmAHoUrRUjJujbOceL3K6AIJAR3IRVGqDcEfQzTVpySS7ei99xBwCgKYDWjO5Dfzp0TPY4gmHYl3hI8Saj/AIvOPMtK4hwq4xMBLfBE0apFIdArxie+DuEuD2AGq3vts9H9ughDG+eB+e3SgXxR231ISUdkJaGxUV0mu6k90zOTWKfvh1wpINo8892EBcK+bIm+edQ/mwYkDkYAf/tntvTg0NG3sUiHGuDyxfnn7TlrzC+HNhdG8gABr+4b2L5EWxycboEEIlohI2y1iy1Ezw5Atb4/Tg=",
        "waf_type": 3
@@ -3449,6 +3459,16 @@
          }
         }
        ]
+      },
+      "region_info": {
+       "ip_region": "US",
+       "path_region": "US",
+       "real_region": "US",
+       "real_region_source": "SALE_REGION",
+       "sale_region": "US"
+      },
+      "route_info": {
+       "canonical_url": "https://shop.tiktok.com/us/pdp/fuffi-4g-smartphone-dual-sim-6-8-inch-hd-6gb-ram-64gb-storage/1732432759321694958"
       },
       "waf_decision": {
        "dkms_token": "MIIBDwQMPY72iTC58/g42Re1BIHsbC5yETdXJWUgvciEWGboPpEj6PBiAgPqnuMDNlgiRLdw41XJtKQ8zg5Tl47WaHd8tRB9jDNlpbo0o5HtbA3dC3aeXaaqrqC+rFxx5v6pVSuU68QdUYZSh/FsF5DxcjRdWxFDOmOAtF42TkJoThGU95vRXZUmVTENSCfGJIi/TbBiEygFSPQk9PxEV7RL0V6karLbY63t3ETBaaG38L3+vqUONGcYQd8GJe9dD2zeHyWqCI7FXy94gQZbYkp5URSOD1bBxds+XJXyUiS8Lb6hnqL75YRid84h0d6wtirbtG1etX7+Zaqc1DnvJbIEEF+b1wU9UX6PfkB64MWW2Mo=",
