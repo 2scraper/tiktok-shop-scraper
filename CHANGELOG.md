@@ -3,10 +3,44 @@
 All notable changes to this project are documented here. Keep a Changelog
 format; SemVer as closely as a CLI toolkit can manage.
 
-## [Unreleased]
+## [0.1.2] — 2026-09-29
+
+> **Behaviour changes.** `region` is the market (`US`), not the language
+> (`en-US`). A page is "product unavailable" (exit 4) only when the shop
+> says so with its own error code; TikTok's risk frame is blocked (exit 3),
+> and an unrecognised frame is a parse error — both used to read as
+> "product unavailable". A page refused once and then served is no longer
+> blocked.
 
 ### Fixed
 
+- **A recovered page is not a blocked one.** `_fetch_with_policy` kept a
+  "refusal seen" flag that a later successful attempt never cleared, so a
+  retry that got the page still reported it blocked. Measured live on
+  2026-09-29 (pyppeteer, @nasa): one empty HTTP 200, then the profile,
+  then `partial` / `stop_reason: blocked` with `pages_failed: []`. And the
+  HTTP -> browser switch spent a `--retries` attempt, so with `--retries 0`
+  a browser started and was never asked for the page. Both fixed in all
+  three engines, with a check that drives the real function.
+- **`region` held the language.** It read `basic_info.lang` ("en-US"); it
+  now reads the shop's own `region` ("US"), and the sidecar records the
+  page's `region_info` (sale, IP and path region, and the canonical
+  address) per product.
+- **"Product unavailable" was any frame without a product.** Counting the
+  captures: the two real missing products carry the shop's own
+  `error_code` 23002002; the two other pages read as missing were TikTok's
+  risk frame (a search route, `risk_level: medium`, no page config at
+  all). Now: the site's code is unavailable (exit 4), the risk frame is a
+  new `risk_refused` state treated as blocked (exit 3), and anything else
+  is a parse error. Two pinned checks that asserted the old reading were
+  rewritten on the real shape.
+- **A regional URL is reported, not silently re-routed.** A `/gb/pdp/…`
+  URL is fetched as `/view/product/{id}` — the one address measured
+  working — and the run now warns that the exit, not the path, picks the
+  market. Fetching the regional path was not changed because it has never
+  been measured.
+- **The canary badge was green when nothing had been scraped.** It is now
+  a fixed grey "skipped without a CDP profile" badge.
 > **`diff_runs.py` never reported a price change.** Its `TRACKED_FIELDS`
 > were tiktok-profile-scraper's account columns, 26 of which `ShopProduct`
 > does not have, and `price` was not among them — while the README says a
