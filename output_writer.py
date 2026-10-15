@@ -12,8 +12,8 @@ This repo reads one KIND of thing, so it carries one dataclass,
 `ShopProduct`. Its siblings — tiktok-profile-scraper,
 tiktok-video-scraper and tiktok-ads-scraper — read different kinds and
 carry their own, and all of them keep the family prefix
-`source, scraped_at, url, sku, title` byte-identical and first
-(CLAUDE.md §9). `mode` is recorded in the run sidecar anyway, so a
+`source, scraped_at, url, sku, title` byte-identical and first.
+`mode` is recorded in the run sidecar anyway, so a
 consumer holding files from several repos can tell them apart without
 knowing which repo wrote which.
 
@@ -62,8 +62,8 @@ class ShopProduct:
     """One TikTok Shop product.
 
     The family prefix — `source`, `scraped_at`, `url`, `sku`, `title` — is
-    byte-identical and in this order across every repo in the family
-    (CLAUDE.md §9). `sku` is the product id; `title` is the listing name.
+    byte-identical and in this order across every repo in the family.
+    `sku` is the product id; `title` is the listing name.
     """
 
     source: str = SOURCE_DEFAULT
@@ -79,7 +79,7 @@ class ShopProduct:
 
     # ---- price ------------------------------------------------------------
     # From TikTok's own price object, which states the currency as a FACT
-    # rather than leaving it to a symbol (CLAUDE.md §4's first tier). Two
+    # rather than leaving it to a symbol (the strongest source of a currency). Two
     # forms are published — `sale_price_decimal` "100.8" and
     # `sale_price_format` "100.80" — and the DECIMAL one is taken, because
     # the formatted one is a display string whose separators change with
@@ -100,7 +100,7 @@ class ShopProduct:
     review_count: Optional[int] = None
     # 4.5 on the measured product. Nulled together with `review_count`
     # when there are no reviews: an unreviewed product is not a product
-    # rated zero (CLAUDE.md §21, met on a third site).
+    # rated zero (met on a third site in this family).
     rating: Optional[float] = None
 
     # ---- the seller ---------------------------------------------------------
@@ -212,6 +212,32 @@ def _csv_value(v: Any) -> Any:
     return v
 
 
+# A spreadsheet treats a cell beginning with one of these as a FORMULA, not
+# as text, and product titles, shop names and descriptions are written by
+# the seller rather than by this code. `=HYPERLINK(...)`, `+cmd|...` and
+# `@SUM(...)` are the classic shapes; a leading tab or newline is here
+# because some readers strip it and expose whatever follows.
+CSV_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+# Prefixed to a cell that would otherwise be read as a formula. Excel, Google
+# Sheets and LibreOffice treat the apostrophe as "the rest is text" and do not
+# show it; a consumer parsing the CSV with `csv` does see it, which is why
+# the count goes into the sidecar as `csv_cells_escaped`.
+CSV_FORMULA_ESCAPE = "'"
+
+
+def _csv_escape(v: Any):
+    """Neutralise a formula-shaped cell. Returns (value, was_escaped).
+
+    Only STRINGS are touched: escaping a number would turn `-5` into the
+    text `'-5` and break every sum over the column. CSV only — the JSON
+    output keeps the site's values exactly as served.
+    """
+    if isinstance(v, str) and v.startswith(CSV_FORMULA_LEADS):
+        return CSV_FORMULA_ESCAPE + v, True
+    return v, False
+
+
 @contextlib.contextmanager
 def _atomic(path: str, newline: Optional[str] = None):
     """Write to a temporary file beside `path`, then rename over it.
@@ -243,6 +269,18 @@ def _atomic(path: str, newline: Optional[str] = None):
             yield handle
             handle.flush()
             os.fsync(handle.fileno())
+        # `NamedTemporaryFile` creates the file 0600 and a rename keeps the
+        # temp file's mode, so without this every output would be readable
+        # by its owner alone, whatever the umask says. An existing target
+        # keeps its own mode (someone may have set it on purpose); a new one
+        # gets what `open(path, "w")` would have given it.
+        try:
+            mode = os.stat(path).st_mode & 0o777
+        except OSError:
+            umask = os.umask(0)
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(handle.name, mode)
         os.replace(handle.name, path)
     except BaseException:
         # Leave the destination untouched. A failed write must not be
@@ -259,7 +297,7 @@ def write_json(rows: Sequence[Any], path: str) -> None:
         json.dump([asdict(r) for r in rows], f, ensure_ascii=False, indent=2)
 
 
-def write_csv(rows: Sequence[Any], path: str, row_cls: Type = ShopProduct) -> None:
+def write_csv(rows: Sequence[Any], path: str, row_cls: Type = ShopProduct) -> int:
     # An empty result still gets the header row. A zero-byte file makes a
     # consumer fail on read (no columns to parse) instead of reading a valid
     # table with zero rows — and "an empty result is still a well-formed
@@ -267,12 +305,23 @@ def write_csv(rows: Sequence[Any], path: str, row_cls: Type = ShopProduct) -> No
     #
     # The header comes from `row_cls`, not from the first row, so an empty
     # run still writes the columns of the mode that produced it.
+    #
+    # Returns how many cells were formula-escaped.
     fieldnames = [f.name for f in fields(row_cls)]
+    escaped = 0
     with _atomic(path, newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: _csv_value(v) for k, v in asdict(r).items()})
+            row = {}
+            for k, v in asdict(r).items():
+                # Escape AFTER `_csv_value`: a list joined into one cell is
+                # text too, and its first element can be formula-shaped.
+                value, was_escaped = _csv_escape(_csv_value(v))
+                row[k] = value
+                escaped += was_escaped
+            writer.writerow(row)
+    return escaped
 
 
 # Exit code used when a run completes but produced nothing. Distinct from 1
@@ -410,7 +459,8 @@ def run_meta(status: str, stop_reason: str, pages_requested: int,
 
 
 def save(rows: Sequence[Any], out_prefix: str, fmt: str,
-         allow_empty: bool = False, row_cls: Type = ShopProduct) -> int:
+         allow_empty: bool = False, row_cls: Type = ShopProduct,
+         stats: Optional[dict] = None) -> int:
     """Write JSON/CSV and return a process exit code.
 
     Returns 0 when rows were written, EXIT_NO_PRODUCTS when there were none.
@@ -437,31 +487,30 @@ def save(rows: Sequence[Any], out_prefix: str, fmt: str,
         write_json(rows, f"{out_prefix}.json")
         print(f"[+] Saved {len(rows)} rows -> {out_prefix}.json")
     if fmt in ("csv", "both"):
-        write_csv(rows, f"{out_prefix}.csv", row_cls=row_cls)
+        escaped = write_csv(rows, f"{out_prefix}.csv", row_cls=row_cls)
         print(f"[+] Saved {len(rows)} rows -> {out_prefix}.csv")
+        # Through `stats` rather than the return value, because this
+        # function's return IS the exit code.
+        if stats is not None:
+            stats["csv_cells_escaped"] = escaped
+        if escaped:
+            print(f"[!] {escaped} CSV cell(s) began with a formula character "
+                  f"and were prefixed with {CSV_FORMULA_ESCAPE!r} so a "
+                  f"spreadsheet reads them as text. The JSON output is "
+                  f"unchanged — see csv_cells_escaped in the sidecar.")
     return 0 if rows else EXIT_NO_PRODUCTS
 
 
 # Stop reasons that mean the run saw everything there was to see. Anything
 # else ended the page loop early, so the result is only a partial view.
 #
-# "no_new_products" belongs here and "pagination_exhausted" is kept for the
-# engines that still stop on a missing next-link: the first is a property of
-# the DATA (a page contributed nothing not already seen, so the listing is
-# over), while the second is a property of a CSS SELECTOR and is therefore
-# the weaker signal — a renamed attribute looks identical to a short
-# catalogue.
-#
-# On TikTok the strongest end-of-listing signal is neither of those: where
-# a route paginates at all, the response itself states what it served —
-# the embed route's own `page` field, the Ad Library's `search_id` cursor
-# — and that statement is what ends a run. A route that answers every page
-# number with page one (the embed route does exactly this) is refused
-# `--pages` above 1 rather than re-collected.
+# This repo fetches one product page per target and never paginates, so only
+# two reasons are produced here: `completed`, and `product_unavailable` —
+# the shop's own statement, by its error code, that the product does not
+# exist. Anything else, including a reason added later and not listed here,
+# reads as NOT complete, which is the safe direction.
 
-COMPLETE_STOP_REASONS = ("completed", "pagination_exhausted", "no_new_products",
-                         "page_cap_reached", "page_echo_mismatch",
-                         "single_page_route", "product_unavailable")
+COMPLETE_STOP_REASONS = ("completed", "product_unavailable")
 
 
 def finish_run(rows: Sequence[Any], out_prefix: str, fmt: str,
@@ -500,12 +549,18 @@ def finish_run(rows: Sequence[Any], out_prefix: str, fmt: str,
     # failed, the run is not complete, whatever it stopped for.
     complete = stop_reason in COMPLETE_STOP_REASONS and not pages_failed
     row_cls = ROW_CLASS_BY_MODE.get(mode, ShopProduct)
-    rc = save(rows, out_prefix, fmt, allow_empty=allow_empty, row_cls=row_cls)
+    write_stats: dict = {}
+    rc = save(rows, out_prefix, fmt, allow_empty=allow_empty, row_cls=row_cls,
+              stats=write_stats)
     wrote_output = bool(rows) or allow_empty
 
     if wrote_output:
         status = "complete" if (rows and complete) else (
             "partial" if rows else "failed")
+        # Merged UNDER the caller's `extra`: an engine's own facts win a
+        # name collision.
+        if write_stats:
+            extra = {**write_stats, **(extra or {})}
         write_run_meta(out_prefix, run_meta(
             status=status, stop_reason=stop_reason,
             pages_requested=pages_requested, pages_completed=pages_completed,

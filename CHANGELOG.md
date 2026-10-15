@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. Keep a Changelog
 format; SemVer as closely as a CLI toolkit can manage.
 
+## [Unreleased]
+
+> **Behaviour changes.**
+> - A served product page that parses to no product is now a parser
+>   failure: the run exits 5 (6 if other products were read), with the page
+>   in `pages_failed`. It used to be reported as "product unavailable",
+>   exit 4. Exit 4 remains for the shop's own "does not exist" error code.
+> - Output files are no longer always 0600: a new file gets the mode the
+>   umask allows (0644 under umask 022), and a replaced file keeps its mode.
+> - In the CSV only, text cells beginning with `=`, `+`, `-`, `@`, a tab or a
+>   line break get a leading `'`. The sidecar counts them as
+>   `csv_cells_escaped`. JSON is unchanged.
+> - Negative `--retries`, `--retry-delay`, `--delay` and
+>   `--proxy-block-retries`, and `--pages`/`--concurrency` below 1, are
+>   refused with exit 2 naming the flag, in all three engines (and
+>   `--retries`, `--retry-delay`, `--timeout` in `scraper_api_client.py`).
+>   `--retries 0` is still accepted and fetches each page once.
+> - `scraper_api_client.py` refuses with exit 2 before asking for a key.
+>   It used to ask for a key and then exit 5.
+> - The canary fails, rather than skipping green, when the
+>   `TIKTOK_CDP_ENDPOINT` secret is not set.
+
+### Fixed
+
+- The Selenium engine's comment claimed every classified response carried
+  an HTTP status; it never does through Selenium, and the comment now says
+  so.
+- Removed unused session methods (`post_json`) and an unread
+  `client_version` slot from every transport, and the pagination stop
+  reasons that nothing in this repo produces.
+- The README and `.env.example` no longer claim that Scraping Browser
+  credentials last about a day; that figure was not measured here.
+- Comments and docs state their rules directly instead of citing internal
+  notes, and a check keeps it that way.
+
 ## [0.1.2] — 2026-09-29
 
 > **Behaviour changes.** `region` is the market (`US`), not the language

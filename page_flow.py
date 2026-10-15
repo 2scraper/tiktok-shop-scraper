@@ -4,7 +4,7 @@ Shared by all three browser engines and the HTTP path so they cannot
 quietly disagree about whether a response is worth retrying, worth paying
 a solver for, or worth reporting as a block. Three copies of that triage
 drift, and the drift is silent: one engine reporting exit 3 where its twin
-reports exit 0 on the same product (CLAUDE.md §1).
+reports exit 0 on the same product.
 
 Policy and pure algorithms only. No JavaScript crosses this boundary —
 Selenium's `execute_script` takes a function BODY with an explicit
@@ -67,7 +67,7 @@ from product_parser import (STATE_CHALLENGE, STATE_CONTENT,
 #
 # `[class*="product"]` and `main` are what a painted product page carries;
 # `body` is the floor that always matches, which is why the minimum is 1
-# rather than the >1 CLAUDE.md §5 requires of a LISTING. A product page
+# rather than the >1 a LISTING wait requires. A product page
 # holds exactly one product, so "more than one match" is not a thing that
 # can be waited for here.
 READY_SELECTOR = '[class*="product"], main, body'
@@ -95,7 +95,7 @@ def wait_for_count(count: Callable[[str], int], selector: str, minimum: int,
 
     The caller passes a counting primitive rather than a snippet, and the
     primitive must be a protocol call — `querySelectorAll` through the
-    driver — never an evaluated STRING. CLAUDE.md §18: a site whose
+    driver — never an evaluated STRING. A site whose
     Content-Security-Policy lacks `unsafe-eval` kills
     `wait_for_function`-style string evaluation. TikTok's CSP does carry
     `unsafe-eval` today (measured 2026-09-22), so this is insurance rather
@@ -125,7 +125,7 @@ def classify(html, status: Optional[int] = None, url: str = "",
     """Name what TikTok answered with. See product_parser.detect_page_state.
 
     The argument ORDER is the contract: every caller writes
-    `classify(html, status, url)`. CLAUDE.md §17 records a sibling repo
+    `classify(html, status, url)`. A sibling repo was recorded
     whose two engines called `classify(html, url=...)` against a callee
     taking `status` second, and both crashed on their FIRST fetch —
     invisible to import, `--help`, `compileall` and four hundred green
@@ -178,8 +178,8 @@ STATE_POLICY = {
     #
     # `solve` False, and that is measured rather than defaulted: the page
     # carries no widget, no sitekey and no captcha of any kind, so paying
-    # a solver would buy a request the API cannot fulfil (CLAUDE.md §19:
-    # detected != paying).
+    # a solver would buy a request the API cannot fulfil (detected
+    # != paying).
     STATE_WAF_CHALLENGE: {"retry": True, "solve": False, "blocked": True,
                           "parse": False},
     # An HTTP error that is not a recognised refusal — a 500, a gateway's
@@ -189,7 +189,7 @@ STATE_POLICY = {
     # A page the site plainly served, with its own assets all over it, that
     # this parser failed to read. OUR bug, and it gets its own name so it
     # cannot be reported as "no such product" — which would send the
-    # reader to check the product id instead of the parser (CLAUDE.md §20).
+    # reader to check the product id instead of the parser.
     # One retry in case a response was truncated, and always worth a dump.
     STATE_PARSE_ERROR: {"retry": True, "solve": False, "blocked": False,
                         "parse": False},
@@ -219,7 +219,7 @@ def should_parse(state: str) -> bool:
 
 # Whether a blocked page is worth re-fetching at all. CONSULTED by the
 # engines rather than merely documented — setting it False really does stop
-# the retry loop. (CLAUDE.md §17: a policy constant nothing reads is the
+# the retry loop. (a policy constant nothing reads is the
 # same defect as dead code, and this family shipped one for months.)
 RETRY_ON_BLOCKED = True
 
@@ -232,7 +232,7 @@ BLOCK_RETRIES_WITHOUT_POOL = 1
 # The solve budget
 # ---------------------------------------------------------------------------
 #
-# One paid solve per page. CLAUDE.md §23 records that this constant has
+# One paid solve per page. This constant has
 # read like an enforced limit in every repo in this family and was not one:
 # every engine calls the captcha handler TWICE per attempt — once before
 # the response is classified, so a challenge is cleared before anything is
@@ -282,7 +282,7 @@ def pagination_is_addressable(url: str = "", mode: str = "product") -> bool:
     What the concurrency machinery would need is therefore present — and
     it is still clamped to one, by `concurrency_limit`, because the access
     runs through a Scraping Browser profile and that allows ONE live
-    connection (CLAUDE.md §7 and §12). Several `pid`s, one run each, is
+    connection. Several `pid`s, one run each, is
     how this route parallelises.
     """
     return True
@@ -307,7 +307,7 @@ def concurrency_limit(cdp_endpoint: Optional[str]) -> Optional[int]:
 
     The Scraping Browser API allows ONE live connection per profile, so N
     workers sharing a `pid` collide with `profile_locked`. Several `pid`s,
-    one run each, is the way to parallelise that path (CLAUDE.md §7).
+    one run each, is the way to parallelise that path.
     """
     return 1 if cdp_endpoint else None
 
@@ -320,3 +320,49 @@ def concurrency_for_mode(mode: str, concurrency: int) -> int:
     configuration measured to work.
     """
     return max(1, int(concurrency or 1))
+
+
+def non_negative_int(text: str) -> int:
+    """argparse type for a count that may be 0 but never negative.
+
+    `--retries` counts EXTRA attempts, so 0 is legal and still fetches the
+    page once. A negative value used to be accepted and silently read as 0;
+    it is now refused up front as a usage error (exit 2) naming the flag.
+    """
+    import argparse
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {text!r}")
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    return value
+
+
+def positive_int(text: str) -> int:
+    """argparse type for a count that must be at least 1 (pages, seconds)."""
+    import argparse
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {text!r}")
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be 1 or more, got {value}")
+    return value
+
+
+def non_negative_float(text: str) -> float:
+    """argparse type for a delay in seconds: 0 or more.
+
+    A negative delay would otherwise reach `time.sleep` and crash the run
+    mid-way (exit 1) instead of being refused as a usage error (exit 2).
+    """
+    import argparse
+    import math
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid float value: {text!r}")
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {text}")
+    return value

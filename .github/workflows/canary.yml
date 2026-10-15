@@ -1,23 +1,18 @@
 # Real runs against TikTok Shop. tests.yml (deliberately) never touches
 # the site, a credential or a paid product; everything that does is here.
 #
-# WHY THIS CANARY SKIPS WITHOUT A SECRET, UNLIKE ITS THREE SIBLINGS
-# -----------------------------------------------------------------
-# CLAUDE.md §11: a canary that cannot pass must SKIP rather than fail,
-# because a check that is always red teaches everyone to ignore checks.
-# §21 gives the other half — a canary that CAN pass without a credential
-# should never be gated on one — and the three sibling repos are that
-# case, running green every morning from a bare runner.
+# WHY THIS CANARY NEEDS A SECRET, UNLIKE ITS THREE SIBLINGS
+# ---------------------------------------------------------
+# Measured 2026-09-22, TikTok Shop served 0 of 3 product pages to a plain
+# HTTP client, 0 of 3 to a local browser (headless and headful), 0 of 3
+# through a US residential exit, and 3 of 3 through a 2Captcha Scraping
+# Browser profile that had already visited tiktok.com. A bare GitHub runner
+# has none of that, so there is no free path to test here.
 #
-# This repo is the first case. Measured 2026-09-22, TikTok Shop served 0
-# of 3 product pages to a plain HTTP client, 0 of 3 to a local browser
-# (headless and headful), 0 of 3 through a US residential exit, and 3 of 3
-# through a 2Captcha Scraping Browser profile that had already visited
-# tiktok.com. A GitHub runner has none of that, so an ungated canary here
-# would be red every day and would be testing nothing.
-#
-# So the job is gated on the profile secret and says why when it is
-# absent.
+# A canary that skips is not a tested success. So without the
+# TIKTOK_CDP_ENDPOINT secret this job FAILS with an error naming it rather
+# than going green, and with it any exit other than 0, a non-complete
+# status, a missing output file or zero rows is red too.
 name: canary
 
 on:
@@ -30,33 +25,38 @@ permissions:
 
 jobs:
   product:
-    name: a real product scrape (skips without a Scraping Browser profile)
+    name: a real product scrape through a Scraping Browser profile
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # `secrets` is not available in a job-level `if`, so presence is
-      # tested through job env and read in each step's `if`.
-      HAS_CDP: ${{ secrets.TIKTOK_CDP_ENDPOINT != '' }}
     steps:
+      - name: Require the Scraping Browser profile secret
+        env:
+          TIKTOK_CDP_ENDPOINT: ${{ secrets.TIKTOK_CDP_ENDPOINT }}
+        run: |
+          if [ -z "$TIKTOK_CDP_ENDPOINT" ]; then
+            echo "::error::TIKTOK_CDP_ENDPOINT secret is not set. This canary"\
+                 "cannot reach TikTok Shop without a 2Captcha Scraping Browser"\
+                 "profile (measured 2026-09-22: 0 of 3 pages to a plain"\
+                 "client, a local browser or a US residential exit). Set the"\
+                 "secret; until then this job is red, not skipped."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
-        if: env.HAS_CDP == 'true'
       - uses: actions/setup-python@v5
-        if: env.HAS_CDP == 'true'
         with:
           python-version: "3.13"
 
       - name: Install the core and the Playwright engine
-        if: env.HAS_CDP == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-playwright.txt
 
       - name: Scrape one product
         id: run
-        if: env.HAS_CDP == 'true'
         env:
           # Through the ENVIRONMENT, never a --flag: a secret in argv is
-          # readable by anything that can run `ps` (CLAUDE.md §3).
+          # readable by anything that can run `ps`.
           TIKTOK_CDP_ENDPOINT: ${{ secrets.TIKTOK_CDP_ENDPOINT }}
         run: |
           set +e   # GitHub runs `run:` under `bash -e`, and a non-zero exit
@@ -66,12 +66,18 @@ jobs:
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Assert what the run actually produced
-        if: env.HAS_CDP == 'true'
         run: |
           python - <<'PY'
           import json, sys
 
-          rc = int("${{ steps.run.outputs.exit_code }}")
+          import os
+
+          rc = int("${{ steps.run.outputs.exit_code }}" or 1)
+          if not os.path.exists("canary_product.json"):
+              # Exits 3, 4 and 5 write no output by design.
+              print(f"::error::canary FAILED: exit {rc} and no output file "
+                    f"— the product page was not obtained")
+              sys.exit(1)
           meta = json.load(open("canary_product.meta.json"))
           rows = json.load(open("canary_product.json"))
           fail = []
@@ -124,7 +130,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
-        if: always() && env.HAS_CDP == 'true'
+        if: always()
         with:
           name: canary-product
           path: |
@@ -133,15 +139,3 @@ jobs:
             canary_product.meta.json
             canary_product_product_*.json
           retention-days: 7
-
-      - name: Say why this was skipped
-        if: env.HAS_CDP != 'true'
-        run: |
-          echo "::notice::Skipped: TIKTOK_CDP_ENDPOINT is not set. Unlike"\
-               "its three sibling repos, this one CANNOT run without a"\
-               "credential: measured 2026-09-22, TikTok Shop served 0 of 3"\
-               "product pages to a plain client, 0 of 3 to a local browser,"\
-               "0 of 3 through a US residential exit, and 3 of 3 through a"\
-               "2Captcha Scraping Browser profile. A canary running here"\
-               "without one would be red every morning and would be"\
-               "testing nothing."

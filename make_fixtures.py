@@ -11,7 +11,7 @@ carrying `product_info` is kept — plus the page's own `basic_info`,
 What is NOT kept, and why it matters here more than in the sibling repos:
 a page served THROUGH A SCRAPING BROWSER PROFILE carries that profile's
 session. The trim removes it as a side effect of keeping only what is
-under test, which is the version of this that cannot rot (CLAUDE.md §10).
+under test, which is the version of this that cannot rot.
 
 The CHALLENGE fixture is kept whole and small: it is 11 KB, it carries no
 session at all, and its entire purpose is to be counted against.
@@ -61,7 +61,7 @@ def _slim_description(model: dict) -> None:
     CDN `uri` whose path segment is 32 hex characters, which this repo's
     own credential scan (rightly) flags.
 
-    CLAUDE.md §24 asks the question in the right order: before exempting a
+    The question comes in this order: before exempting a
     value, check whether it is needed at all. It is not — nothing reads
     it — so the image blocks keep their `type` (which is what the filter
     under test acts on) and lose their payload. Removing beats forgiving,
@@ -92,7 +92,7 @@ def _slim_description(model: dict) -> None:
 # scheme and no host, so the scan's "inside a TikTok URL" rule cannot see
 # it, and it is 32 hex characters, so the scan flags it.
 #
-# CLAUDE.md §24, for the third time in this build: before exempting a
+# For the third time in this build: before exempting a
 # value, check whether it is needed. It is not.
 _UNREAD_IMAGE_FIELDS = ("uri", "thumb_url_list", "url_prefix")
 
@@ -107,7 +107,7 @@ def _strip_unread(node):
 
     Nothing in `product_parser.py` reads `uri`: image URLs come from
     `url_list`. Verified with a grep before this function was written,
-    which is the order CLAUDE.md §24 asks for — establish that the value
+    which is the right order — establish that the value
     is unneeded, then remove it, rather than exempting it and hoping.
     """
     if isinstance(node, dict):

@@ -12,7 +12,7 @@ which here is TikTok Shop's product id.
 Typical use is a scheduled re-run kept under a dated filename, diffed against
 the previous one:
 
-    # TIKTOK_CDP_ENDPOINT is read from .env, never typed (CLAUDE.md §3)
+    # TIKTOK_CDP_ENDPOINT is read from .env, never typed
     python3 playwright_scraper.py --url 1732432759321694958 --out "shop_$(date +%F)"
     python3 diff_runs.py --old "$(ls -t shop_*.json | grep -v meta | sed -n 2p)" \\
                           --new "shop_$(date +%F).json" --out diff.json
