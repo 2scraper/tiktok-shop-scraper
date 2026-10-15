@@ -5,6 +5,8 @@ format; SemVer as closely as a CLI toolkit can manage.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-15
+
 > **Behaviour changes.**
 > - A served product page that parses to no product is now a parser
 >   failure: the run exits 5 (6 if other products were read), with the page
