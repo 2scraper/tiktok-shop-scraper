@@ -2,7 +2,7 @@
 
 [![release](https://img.shields.io/github/v/release/2scraper/tiktok-shop-scraper?sort=semver)](https://github.com/2scraper/tiktok-shop-scraper/releases)
 [![tests](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml/badge.svg)](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml)
-[![canary](https://img.shields.io/badge/canary-skipped%20without%20a%20CDP%20profile-lightgrey)](#the-canary)
+[![canary](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/canary.yml/badge.svg)](#the-canary)
 [![python](https://img.shields.io/badge/python-3.9%20%7C%203.12-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 [![engines](https://img.shields.io/badge/engines-Playwright%20%7C%20Selenium%20%7C%20pyppeteer%20%7C%20CDP-informational)](#what-it-took-to-get-a-single-product-page)
@@ -152,7 +152,7 @@ pins that the two fixtures really do differ.
 * **A Scraper API path.** The measured access is a *persistent* Scraping
   Browser profile; the Scraper API is a different 2Captcha product that
   fetches a URL per call. That is what this repo does not implement, not a
-  limitation of the service.
+  limitation of the service. `scraper_api_client.py` says so and exits 2.
 
 ---
 
@@ -165,11 +165,15 @@ pins that the two fixtures really do differ.
 | 2 | bad usage |
 | 3 | blocked — the challenge, or TikTok's risk frame (a page with a risk verdict and no product) |
 | 4 | zero products — the shop SAID the product does not exist (its own `error_code`; the page reads "not available in this country or region") |
-| 5 | the content was never obtained |
-| 6 | partial |
+| 5 | the content was never obtained, or a served product page parsed to nothing (a parser failure, never reported as an unavailable product) |
+| 6 | partial — some products read, another failed |
 
 **A run that finds nothing writes nothing.** `--allow-empty` is the
-opt-out. `region` is the market that ANSWERED, as the shop states it, and
+opt-out. Output files honour the umask when new and keep their mode when
+replaced. In the CSV only, a text cell beginning with `=`, `+`, `-`, `@`,
+a tab or a line break gets a leading `'` so a spreadsheet does not run it
+as a formula; the sidecar's `csv_cells_escaped` counts them, and the JSON
+keeps the values as served. `region` is the market that ANSWERED, as the shop states it, and
 the sidecar records that page's own `region_info` per product; a
 `/gb/pdp/…` URL is fetched as `/view/product/{id}`, and the market is
 decided by the exit (`--cdp-endpoint`'s `country-`), not the path — the run
@@ -187,26 +191,25 @@ python3 env_config.py      # prints what was picked up, WITHOUT printing secrets
 ```
 
 Variables: `TWOCAPTCHA_KEY`, `TIKTOK_CDP_ENDPOINT`, `TIKTOK_PROXY`,
-`TIKTOK_URL`. A Scraping Browser profile's credentials live about a day,
-so never paste a working endpoint anywhere durable — `.env.example`
-documents the shape, not a credential.
+`TIKTOK_URL`. Never paste a working Scraping Browser endpoint anywhere
+durable — `.env.example` documents the shape, not a credential.
 
 ---
 
 ## The canary
 
-Unlike its three siblings, this repo's canary **skips without a secret**
-and says so with a `::notice::`. It cannot be otherwise: the access is a
-Scraping Browser profile, and a canary that ran without one would be red
-every morning — which teaches everyone to ignore checks.
+`canary.yml` runs daily and on dispatch. Unlike its three siblings, this
+repo's canary **needs a secret**: the access is a Scraping Browser profile
+that has already visited tiktok.com (measured 2026-09-22: 0 of 3 product
+pages to a plain client, a local browser or a US residential exit), so a
+bare GitHub runner has no free path to the shop.
 
-So its badge above is a fixed grey one rather than the workflow's own:
-that workflow goes GREEN when it skips, and a green canary badge reads as
-"the shop was scraped this morning", which it was not. A scheduled
-positive canary is not on offer either: a Scraping Browser profile's
-credentials last about a day, so a stored secret would be stale by the
-next run. Dispatch it by hand with a fresh `TIKTOK_CDP_ENDPOINT` secret
-when you need the evidence.
+Without the `TIKTOK_CDP_ENDPOINT` secret the job fails with an error naming
+it, rather than skipping green: a skipped canary is not a tested success.
+With it, the run must exit 0 with a complete status and one product whose
+price, currency, title, seller, shop, images and description are filled.
+Anything else — a challenge (exit 3), a page not obtained (exit 5), zero
+rows — is red.
 
 ---
 

@@ -16,7 +16,7 @@ an engine with --cdp-endpoint.
 
     # TWOCAPTCHA_KEY and TIKTOK_URL are read from .env, so neither needs
     # to be typed — a secret in argv is readable by anything that can run
-    # `ps` (CLAUDE.md §3).
+    # `ps`.
 """
 
 import argparse
@@ -35,6 +35,7 @@ from tiktok_payload import PayloadError
 from output_writer import (EXIT_NO_PRODUCTS, ShopProduct, finish_run,
                            utc_now)
 import env_config
+import page_flow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("scraper_api_client")
@@ -177,7 +178,7 @@ def fetch_html(args) -> str:
     # the word "success" against 400 and crashed on its first live run
     # (`'>=' not supported between 'str' and 'int'`), while the comment
     # beneath this line claimed the status was being threaded through.
-    # CLAUDE.md §16: re-read what a remote API actually returns, rather
+    # Re-read what a remote API actually returns, rather
     # than what the client's field names imply it returns.
     raw_status = body.get("http_code")
     try:
@@ -195,27 +196,17 @@ def fetch_html(args) -> str:
     return html, upstream_status
 
 
+# Usage error, not EXIT_API_ERROR: nothing remote failed. This route is
+# one this repo does not offer, and 5 ("content not obtained") would send a
+# caller looking for a service fault that never happened.
+EXIT_NOT_OFFERED = 2
+
+
 def main() -> int:
     args = parse_args()
-
-    if not args.key:
-        logger.error("No 2captcha API key. Pass --key, or better, export "
-                     "TWOCAPTCHA_KEY.")
-        return 2
-
-    # A challenge page is not necessarily final, so a single attempt is not
-    # evidence. Each retry is a fresh billable task, so the default is
-    # deliberately low.
-    attempts = max(1, args.retries + 1)
-    rc = 1
-    for attempt in range(1, attempts + 1):
-        rc = _run_once(args, attempt, attempts)
-        if rc != 3 or attempt == attempts:
-            return rc
-        logger.info("Challenge page on attempt %d/%d — retrying in %ds.",
-                    attempt, attempts, args.retry_delay)
-        time.sleep(args.retry_delay)
-    return rc
+    # Refused BEFORE the key check: there is nothing a key would unlock on
+    # this route, so asking for one first would imply otherwise.
+    return _run_once(args)
 
 
 def _run_once(args, attempt: int = 1, attempts: int = 1) -> int:
@@ -227,9 +218,9 @@ def _run_once(args, attempt: int = 1, attempts: int = 1) -> int:
     is a different 2Captcha product — it fetches a URL per call — so this
     client has nothing to offer on this route.
 
-    CLAUDE.md §19: "THIS REPO does not implement X" is a TODO and reads
-    like one; "it cannot be done" would be a claim about a vendor that no
-    measurement here supports.
+    The wording is deliberate: this is what THIS REPO does not implement,
+    not a claim that the service cannot do it, which no measurement here
+    supports.
     """
     logger.error(
         "The Scraper API path is not implemented for TikTok Shop. The "
@@ -237,10 +228,9 @@ def _run_once(args, attempt: int = 1, attempts: int = 1) -> int:
         "BROWSER profile that has already visited tiktok.com — a "
         "persistent profile carrying its cookies between connections — "
         "and the Scraper API is a different product that fetches a URL "
-        "per call. CLAUDE.md §19's wording rule applies: this is what "
-        "THIS REPO does not implement, not a limitation of the service. "
-        "Use an engine with --cdp-endpoint.")
-    return EXIT_API_ERROR
+        "per call. This repo does not implement that path; it is not a "
+        "limitation of the service. Use an engine with --cdp-endpoint.")
+    return EXIT_NOT_OFFERED
 
 
 def parse_args():
@@ -266,7 +256,7 @@ def parse_args():
     p.add_argument("--format", choices=["json", "csv", "both"], default="both")
     p.add_argument("--out", default="tiktok_shop_scraperapi",
                    help="Output file prefix")
-    p.add_argument("--timeout", type=int, default=60,
+    p.add_argument("--timeout", type=page_flow.positive_int, default=60,
                    help=f"API-side task timeout in seconds "
                         f"(1-{MAX_API_TIMEOUT}, default 60)")
     p.add_argument("--cdp-url", default=None,
@@ -283,10 +273,11 @@ def parse_args():
                       # measured 2026-09-23.
                       choices=("load", "domcontentloaded"),
                       help="Wait for a page lifecycle state.")
-    p.add_argument("--retries", type=int, default=1,
+    p.add_argument("--retries", type=page_flow.non_negative_int, default=1,
                    help="Retries when the response is a challenge page. Each "
                         "one is a fresh billable task.")
-    p.add_argument("--retry-delay", type=int, default=5)
+    p.add_argument("--retry-delay", type=page_flow.non_negative_float,
+                   default=5)
     p.add_argument("--dump-html", default=None,
                    help="Write the exact HTML the service returned.")
     p.add_argument("--allow-empty", action="store_true")

@@ -22,13 +22,13 @@ shop serves it: measured 3 of 3 product pages on a profile carrying ~30
 cookies, against 0 of 3 on its first visit and 0 of 3 from a local browser
 that had been warmed the same way (11 cookies, still refused).
 
-So the honest sentence is the one CLAUDE.md §13 asks for: on THIS route the
+So the honest sentence is this: on THIS route the
 2Captcha Scraping Browser is not a convenience, it is the access. The
 sibling repos say the opposite about their own routes and mean it.
 
 What is NOT claimed here
 ========================
-CLAUDE.md §19 is explicit that "unsolvable" is a property of a PAGE and
+"Unsolvable" is a property of a PAGE and
 never of a vendor, and that the only sentence a repo may write about a
 solver is what the REPO does. So, precisely:
 
@@ -51,7 +51,7 @@ loader payload — with the product under
 
 `N` was 3 on the page this parser was written against, and is NOT what
 this file anchors on: the component is found by SHAPE, the same reasoning
-as CLAUDE.md §4's "anchor on a URL pattern, never a CSS class".
+as "anchor on a URL pattern, never a CSS class".
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ ACCEPTED_HOSTS = ("shop.tiktok.com", "www.tiktok.com", "tiktok.com")
 
 # A TikTok Shop product id is a 19-digit snowflake. Anchored on the URL,
 # which is a contract with search engines, rather than on any class in the
-# rendered page (CLAUDE.md §4).
+# rendered page.
 _PRODUCT_ID_RE = re.compile(r"^\d{15,21}$")
 _PRODUCT_PATH_RE = re.compile(
     r"/(?:view/product|[a-z]{2}/pdp(?:/[^/]+)?|pdp(?:/[^/]+)?)/(\d{15,21})")
@@ -88,7 +88,7 @@ KNOWN_REGIONS = ("us", "gb", "id", "my", "th", "vn", "ph", "sg", "es", "ie",
 
 
 class NotAProductUrl(ValueError):
-    """Refused WITH THE REASON (CLAUDE.md §5)."""
+    """Refused WITH THE REASON."""
 
 
 def parse_target(raw: str) -> str:
@@ -218,7 +218,7 @@ def market(data: Dict[str, Any]) -> Dict[str, Any]:
     301'd to /us/pdp/{slug}/{id} with sale_region, ip_region and
     path_region all "US" and real_region_source "SALE_REGION". So the
     market is the SITE's statement about this response, and the URL a
-    caller typed is only a request for one (CLAUDE.md §20: the Scraping
+    caller typed is only a request for one (the Scraping
     Browser's country segment wins over the path).
     """
     frame = _any_frame(data)
@@ -375,7 +375,7 @@ def parse_product(html: Any, url: str, scraped_at: str,
     # TikTok publishes its own discount. It is CHECKED against the two
     # prices rather than trusted: where the site's figure and the
     # arithmetic disagree by more than a point, the column is nulled
-    # rather than a guess being presented as a fact (CLAUDE.md §8), and
+    # rather than a guess being presented as a fact, and
     # the disagreement goes in the diagnostics with the id.
     discount = _num(price_block.get("discount_decimal"))
     if discount is not None and discount <= 1:
@@ -400,7 +400,7 @@ def parse_product(html: Any, url: str, scraped_at: str,
     review = info.get("review_model") or {}
     review_count = _int(review.get("product_review_count"))
     rating = _num(review.get("product_overall_score"))
-    # An unreviewed product is not a product rated zero. CLAUDE.md §21,
+    # An unreviewed product is not a product rated zero. This was
     # met on a third site in this family — both columns go null together.
     if not review_count:
         review_count, rating = None, None
@@ -529,7 +529,7 @@ def detect_page_state(html: Any, status: Optional[int] = None,
     """Name what TikTok Shop answered with.
 
     The argument ORDER is the contract: `detect_page_state(html, status,
-    url)` — CLAUDE.md §17, and the suite binds every call site against it.
+    url)`, and the suite binds every call site against it.
 
     The challenge check comes FIRST here, unlike in the sibling repos,
     and that is deliberate: on this route the challenge is the common
@@ -541,7 +541,7 @@ def detect_page_state(html: Any, status: Optional[int] = None,
     # right here with `'>=' not supported between 'str' and 'int'` — exit 1
     # on the one engine that costs money, invisible to every offline check
     # because none of them feeds a status the way that service does.
-    # CLAUDE.md §16: run every path a credential gates.
+    # Run every path a credential gates.
     status = _coerce_status(status)
     if is_empty_success(status, html):
         return STATE_EMPTY_SUCCESS
@@ -583,7 +583,7 @@ def detect_page_state(html: Any, status: Optional[int] = None,
         # page) with risk_level "medium" and a risk-reason code — TikTok
         # declining the client, not the product being absent. Anything
         # else is a frame this parser does not know: its failure, not an
-        # empty answer (CLAUDE.md §20).
+        # empty answer.
         if product_error_code(page) is not None:
             return STATE_PRODUCT_UNAVAILABLE
         if risk_level(page) not in (None, "", "low"):

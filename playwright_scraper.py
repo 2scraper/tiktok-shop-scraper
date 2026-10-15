@@ -35,7 +35,7 @@ refused, which is why `--cdp-endpoint` is what the README asks for.
 
 What this repo does NOT claim about the solver
 ==============================================
-CLAUDE.md §19: "unsolvable" is a property of a PAGE, never of a vendor,
+"Unsolvable" is a property of a PAGE, never of a vendor,
 and the only sentence a repo may write is what the REPO does.
 
   * THIS REPO does not solve the shop's slide puzzle. It implements no
@@ -95,7 +95,7 @@ DEFAULT_MODE = "product"
 
 ENGINE_NAME = "playwright"
 
-# Every remote call is bounded (CLAUDE.md §8).
+# Every remote call is bounded.
 REQUEST_TIMEOUT_MS = 30_000
 NAVIGATION_TIMEOUT_MS = 90_000
 
@@ -116,7 +116,7 @@ WARM_DWELL_MS = 5_000
 class PageOutcome:
     """One fetch attempt's result, in request order rather than arrival order.
 
-    CLAUDE.md §8: merging by arrival order makes the output depend on which
+    Merging by arrival order makes the output depend on which
     worker finished first. Workers return these and the caller sorts.
     """
     number: int
@@ -133,7 +133,7 @@ class PageOutcome:
 def _mask_credentials(text: Any) -> str:
     """Mask every credential in a string, not just the first.
 
-    CLAUDE.md §8: a masker that handles the first occurrence prints the
+    A masker that handles the first occurrence prints the
     password the other four times and looks like it is working — Playwright
     repeats a CDP endpoint five times in one error, once in the message and
     four more in its call log.
@@ -149,7 +149,7 @@ def _mask_credentials(text: Any) -> str:
 def _chrome_ua(chromium_version: str) -> str:
     """A user agent built from the Chromium actually installed.
 
-    CLAUDE.md §8: a hardcoded version drifts from whatever is installed,
+    A hardcoded version drifts from whatever is installed,
     and claiming an older Chrome than the JS engine and TLS handshake
     report is itself a mismatch.
     """
@@ -161,7 +161,7 @@ def _chrome_ua(chromium_version: str) -> str:
 def _proxy_failure(exc: Exception) -> str:
     """Name a dead proxy, or "" for anything else.
 
-    CLAUDE.md §8: Chromium reports a dead proxy as a generic error, not a
+    Chromium reports a dead proxy as a generic error, not a
     timeout, and the two want opposite responses — a timeout deserves
     another try at the SAME exit, a dead proxy a DIFFERENT one. Catching
     only the timeout type let this escape as a traceback in a sibling repo.
@@ -178,20 +178,19 @@ def _proxy_failure(exc: Exception) -> str:
 class _BrowserSession:
     """A browser, a context on tiktok.com, and the request API bound to it.
 
-    A rotation is a FRESH BROWSER (CLAUDE.md §8): cookies a bot manager
+    A rotation is a FRESH BROWSER: cookies a bot manager
     issued against exit A and replayed from exit B are a stronger signal
     than either address alone. So this object is torn down and rebuilt
     rather than having its proxy swapped underneath it.
     """
 
     def __init__(self, browser, context, page, proxy_url: Optional[str],
-                 client_version: str, user_agent: Optional[str],
+                 user_agent: Optional[str],
                  owns_context: bool = True):
         self.browser = browser
         self.context = context
         self.page = page
         self.proxy_url = proxy_url
-        self.client_version = client_version
         self.user_agent = user_agent
         # False when we adopted the remote browser's existing context
         # instead of creating one. Closing a context we did not create
@@ -212,24 +211,6 @@ class _BrowserSession:
             return response.status, response.text()
         except PWError as exc:
             raise _TransportError(_mask_credentials(exc)) from exc
-
-    def post_json(self, url: str, headers: Dict[str, str],
-                  body: Dict[str, Any]) -> Tuple[Optional[int], Any]:
-        try:
-            response = self.context.request.post(
-                url, headers=headers, data=body, timeout=REQUEST_TIMEOUT_MS)
-        except PWError as exc:
-            raise _TransportError(_mask_credentials(exc)) from exc
-        status = response.status
-        try:
-            return status, response.json()
-        except Exception:
-            # A refusal is not JSON. Hand the body back as text so the
-            # classifier can name it rather than the run dying on a decode.
-            try:
-                return status, response.text()
-            except Exception:
-                return status, None
 
     def goto(self, url: str) -> Optional[int]:
         response = self.page.goto(url, timeout=NAVIGATION_TIMEOUT_MS,
@@ -258,12 +239,12 @@ class _BrowserSession:
         tiktok-profile-scraper's route) DOES carry
         `'unsafe-eval'`, so a string-eval would work here today. The
         comment inherited with this core claimed the opposite about this
-        site, which is CLAUDE.md §16 exactly: a copied file's certainty is
+        site: a copied file's certainty is
         about the repo it came from.
 
         It stays a function object anyway, for two reasons that do not
         depend on today's header. A CSP is a per-route header a site can
-        tighten without telling anyone, and CLAUDE.md §18 records a
+        tighten without telling anyone, and a
         sibling whose readiness wait died with `EvalError` on the site's
         most obvious URL when exactly that happened. And Selenium's
         `execute_script` takes a function BODY while Playwright and
@@ -288,7 +269,7 @@ class _BrowserSession:
 
         Named as an OPERATION because the three drivers spell waiting
         differently, and a shared module that carried one spelling would
-        acquire that driver's dialect (CLAUDE.md §1).
+        acquire that driver's dialect.
         """
         try:
             self.page.wait_for_timeout(milliseconds)
@@ -307,7 +288,7 @@ class _BrowserSession:
         """How many cookies this session carries.
 
         Named as an OPERATION so the shared code can log it; the dialect
-        stays here (CLAUDE.md §1).
+        stays here.
         """
         try:
             return len(self.context.cookies())
@@ -351,7 +332,7 @@ def _launch_local(pw, args, pool: Optional[ProxyPool]) -> _BrowserSession:
     if proxy_conf:
         # Credentials go through Playwright's own fields, never onto the
         # command line: `--proxy-server=` becomes part of the browser's
-        # argv, readable by anything that can run `ps` (CLAUDE.md §8).
+        # argv, readable by anything that can run `ps`.
         launch_kwargs["proxy"] = proxy_conf
     browser = pw.chromium.launch(**launch_kwargs)
 
@@ -380,11 +361,8 @@ def _launch_local(pw, args, pool: Optional[ProxyPool]) -> _BrowserSession:
     page = context.new_page()
     if fingerprint is not None:
         _apply_fingerprint(context, page, fingerprint, user_agent)
-    # The `client_version` slot is part of the shared session interface.
-    # A TikTok Shop product page takes no such parameter, so it stays
-    # empty rather than carrying a constant nothing reads (CLAUDE.md §17).
     return _BrowserSession(browser, context, page, proxy_url,
-                           "", user_agent)
+                           user_agent)
 
 
 def _apply_fingerprint(context, page, fingerprint, user_agent) -> None:
@@ -402,8 +380,8 @@ def _apply_fingerprint(context, page, fingerprint, user_agent) -> None:
     `navigator.userAgentData` reporting the REAL browser. Measured
     2026-09-21 by reading both back out of a live page: the UA said
     `Chrome/150` while the brands said `HeadlessChrome/153`. That is a
-    contradiction rather than cover, and it is the half-identity CLAUDE.md
-    §24 measured being refused where a complete one was served.
+    contradiction rather than cover, and it is the half-identity a sibling
+    site was measured refusing where a complete one was served.
 
     Applied TOGETHER with the user agent and never alone, for the same
     reason: a bare override is the thing that failed there.
@@ -424,7 +402,7 @@ def _apply_fingerprint(context, page, fingerprint, user_agent) -> None:
     if not metadata:
         logger.warning("The fingerprint carried no brand list, so its client "
                        "hints are left alone: a HALF identity is worse than "
-                       "none (CLAUDE.md §24).")
+                       "none.")
         return
     payload = {"userAgent": user_agent, "userAgentMetadata": metadata}
     language = accept_language(fingerprint)
@@ -442,7 +420,7 @@ def _apply_fingerprint(context, page, fingerprint, user_agent) -> None:
         # reported `HeadlessChrome/153` in the brands while one that kept
         # the session reported the fingerprint's `Google Chrome/150`. The
         # call succeeded either way, so this failed silently in exactly the
-        # way CLAUDE.md §16 describes — the tool doing less than it says
+        # way that matters most — the tool doing less than it says
         # while reporting success. The session is parked on the page so it
         # lives as long as the browser does.
         page._2captcha_cdp_session = session
@@ -458,7 +436,7 @@ def _connect_remote(pw, args) -> _BrowserSession:
 
     Never sets a user agent, a fingerprint or a proxy on top: the remote
     browser brings its own, and stacking a second creates a contradiction
-    rather than better cover (CLAUDE.md §8). The engine refuses those
+    rather than better cover. The engine refuses those
     combinations in `parse_args` rather than quietly dropping them.
     """
     # The upgrade is RETRIED, because a rejection here is usually the
@@ -466,11 +444,11 @@ def _connect_remote(pw, args) -> _BrowserSession:
     # Scraping Browser endpoint: three raw WebSocket upgrades seconds
     # apart gave `HTTP 500` instantly on the first and connected on the
     # other two. Un-retried, that is exit 5 on roughly a third of runs for
-    # a condition that clears by itself — and CLAUDE.md §20 names it: a
+    # a condition that clears by itself — and it is not our bug: a
     # managed browser answering 500 on the upgrade is the SERVICE failing
     # to raise its own exit, not this code.
     #
-    # Deliberately NOT the same thing as a dead proxy (§8). There is no
+    # Deliberately NOT the same thing as a dead proxy. There is no
     # other exit to move to here, so the right response is to ask the same
     # endpoint again after a moment rather than to rotate.
     browser = None
@@ -497,7 +475,7 @@ def _connect_remote(pw, args) -> _BrowserSession:
     context = browser.contexts[0] if adopted else browser.new_context()
     page = context.pages[0] if context.pages else context.new_page()
     return _BrowserSession(browser, context, page, None,
-                           "", None,
+                           None,
                            owns_context=not adopted)
 
 
@@ -519,7 +497,7 @@ def _open_http(args, pool: Optional[ProxyPool]) -> HttpSession:
         "US residential exit, 0 pages served. This is tried rather than "
         "refused so that a change in the site is discoverable, but expect "
         "exit 3.")
-    return HttpSession(proxy_url, _chrome_ua(""), "")
+    return HttpSession(proxy_url, _chrome_ua(""))
 
 
 def _open_session(pw, args, pool: Optional[ProxyPool]):
@@ -588,7 +566,7 @@ def _prime_session(session, args, url: str) -> Optional[int]:
             # (Described rather than named, because the check that keeps
             # this fixed greps this function for that primitive's name —
             # and a comment about a banned string is a use of it, which
-            # CLAUDE.md §22 records the family learning the hard way.)
+            # the family learned the hard way.)
             #
             # WARM_DWELL_MS is what the successful probe used.
             session.dwell(WARM_DWELL_MS)
@@ -635,13 +613,13 @@ def _handle_captcha_in_browser(session, args,
     """Detect and, if it is worth paying for, solve a challenge.
 
     Both call sites — before classification and after — go through the same
-    `SolveBudget`, which is the CLAUDE.md §23 fix: `SOLVES_PER_PAGE` read
+    `SolveBudget`. `SOLVES_PER_PAGE` used to read
     like an enforced limit in every repo in this family and was not one,
     because only the second of the two calls was counted. One page bought
     three solves on a site where a challenge rendered on every fetch.
 
-    A missing key or a solver error is a WARNING and the run continues
-    (CLAUDE.md §8): detection is not the same as blocking, and a run that
+    A missing key or a solver error is a WARNING and the run continues:
+    detection is not the same as blocking, and a run that
     already has data must not die because a solve failed.
     """
     if args.solve_captcha == "never":
@@ -710,7 +688,7 @@ def _handle_captcha_in_browser(session, args,
 def _dump(args, name: str, payload: Any) -> None:
     """Write the exact bytes a call returned.
 
-    On SUCCESS too, not only on failure (CLAUDE.md §9): a run can return
+    On SUCCESS too, not only on failure: a run can return
     the right count with a field silently unpopulated, and then the exact
     payload is the only way to tell a parsing bug from a too-early
     snapshot.
@@ -775,7 +753,7 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
 
     `session_box` holds the live session so a rotation can replace it: a
     rotation is a fresh browser, never a proxy swapped under a live
-    session (CLAUDE.md §8).
+    session.
     """
     budget = SolveBudget()
     attempts = max(1, int(args.retries) + 1)
@@ -807,8 +785,7 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
                 # responses: a timeout deserves another try at the SAME
                 # exit, a dead proxy a DIFFERENT one. Chromium reports it
                 # as a generic error rather than as a timeout, which is how
-                # this escaped as a traceback in a sibling repo
-                # (CLAUDE.md §8).
+                # this escaped as a traceback in a sibling repo.
                 logger.warning("%s failed at the EXIT, not at the site: %s "
                                "via %s. Rotating rather than retrying the "
                                "same address.", label, exit_failed,
@@ -882,8 +859,9 @@ def _fetch_with_policy(session_box: Dict[str, Any], pw, args,
     # on the way: a retry that got the content is a recovered page.
     # Reporting it as blocked turned a complete run into exit 6 /
     # stop_reason blocked with pages_failed [] — measured live on
-    # 2026-09-29, pyppeteer, @nasa: one empty HTTP 200, then the
-    # profile, then "partial".
+    # 2026-09-29 with pyppeteer on the profile route of the sibling
+    # tiktok-profile-scraper (@nasa), which shares this loop: one empty
+    # HTTP 200, then the page, then "partial".
     return (status, payload, state,
             blocked_seen and not page_flow.should_parse(state))
 
@@ -901,9 +879,9 @@ def _rotate_if_per_page(session_box, pw, args, pool, why: str) -> bool:
     run whose pages all succeeded stayed on one address for its whole
     life. The flag read like a traffic-spreading control and was a
     recovery control — a setting that looks configurable and is not
-    (CLAUDE.md §3 says that about `.env`; it is the same defect here).
+    (the same defect as a `.env` value that nothing reads).
 
-    A rotation is a FRESH BROWSER (CLAUDE.md §8): cookies a bot manager
+    A rotation is a FRESH BROWSER: cookies a bot manager
     issued against exit A and replayed from exit B are a stronger signal
     than either address alone, so the session is torn down and rebuilt
     rather than having its proxy swapped underneath it.
@@ -927,7 +905,7 @@ def _worker_pool(pool: Optional[ProxyPool], worker_index: int):
     Each worker gets its OWN pool object holding the same exits rotated to
     a different offset, so workers start on distinct addresses and no
     thread needs a lock — the concurrency is safe by construction rather
-    than by discipline (CLAUDE.md §7).
+    than by discipline.
     """
     if not pool:
         return None
@@ -1013,7 +991,16 @@ def _fetch_one_product(session_box, pw, args, pool, product_id, scraped_at,
     outcome.rows = rows
     outcome.diagnostics = diag
     if not rows:
-        outcome.state = STATE_PRODUCT_UNAVAILABLE
+        # The page classified as content, so the shop did NOT say the
+        # product is gone (that is its own error code, handled above as
+        # STATE_PRODUCT_UNAVAILABLE). A served product page that parses to
+        # nothing is a parser failure — a renamed field, a moved product
+        # id — and must not be reported as "the product does not exist".
+        logger.error("product %s was served as a product page but no "
+                     "product could be read from it — parser failure, not "
+                     "an unavailable product.", product_id)
+        outcome.state = parser.STATE_PARSE_ERROR
+        outcome.error = "served product page parsed to zero rows"
     return outcome
 
 
@@ -1126,7 +1113,7 @@ def scrape(args) -> int:
         args.concurrency = limit
 
     if not args.cdp_endpoint:
-        # A warning, not a refusal. CLAUDE.md §7's rule for concurrency
+        # A warning, not a refusal. The rule for concurrency
         # applies to access too: state the measurement and let the caller
         # decide, because a refusal would also stop anyone discovering
         # that the site had changed.
@@ -1217,7 +1204,7 @@ def parse_args(argv: Optional[List[str]] = None):
     p.add_argument("--no-warm", dest="warm", action="store_false",
                    help="Go straight to the shop. Fine on a profile that has "
                         "been used before; refused on a fresh one.")
-    p.add_argument("--pages", type=int, default=1,
+    p.add_argument("--pages", type=page_flow.positive_int, default=1,
                    help="Kept for the family's flag contract and capped at "
                         "1: a product page is one page. Name more products "
                         "in --url instead.")
@@ -1228,10 +1215,12 @@ def parse_args(argv: Optional[List[str]] = None):
                         "region comes from the exit, not from this.")
     p.add_argument("--format", choices=("json", "csv", "both"), default="json")
     p.add_argument("--out", default="tiktok_shop", help="Output file prefix.")
-    p.add_argument("--delay", type=float, default=0.0)
-    p.add_argument("--retries", type=int, default=2)
-    p.add_argument("--retry-delay", type=float, default=2.0)
-    p.add_argument("--concurrency", type=int, default=1,
+    p.add_argument("--delay", type=page_flow.non_negative_float, default=0.0)
+    p.add_argument("--retries", type=page_flow.non_negative_int, default=2,
+                   help="Extra attempts after the first; 0 still fetches "
+                        "each page once.")
+    p.add_argument("--retry-delay", type=page_flow.non_negative_float, default=2.0)
+    p.add_argument("--concurrency", type=page_flow.positive_int, default=1,
                    help="Forced to 1 with --cdp-endpoint, which the access "
                         "needs: the Scraping Browser allows one live "
                         "connection per profile and workers collide with "
@@ -1240,7 +1229,7 @@ def parse_args(argv: Optional[List[str]] = None):
     p.add_argument("--proxy-file", default=None)
     p.add_argument("--proxy-rotate", choices=ROTATE_MODES, default="per-run")
     p.add_argument("--proxy-shuffle", action="store_true")
-    p.add_argument("--proxy-block-retries", type=int, default=2)
+    p.add_argument("--proxy-block-retries", type=page_flow.non_negative_int, default=2)
     p.add_argument("--twocaptcha-key", default=None,
                    help="2Captcha API key. Also read from TWOCAPTCHA_KEY.")
     p.add_argument("--captcha-api", choices=("v1", "v2"), default="v2")

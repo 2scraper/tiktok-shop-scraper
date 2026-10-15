@@ -20,8 +20,8 @@ TikTok that fallback is load-bearing rather than theoretical: the WAF
 interstitial a residential exit sometimes gets is cleared by a browser.
 
 The interface is the one `_BrowserSession` already presents, so everything
-above the transport in an engine is unchanged: `get_text`, `post_json`,
-`goto`, `content`, `count_selector`, `evaluate`, `url`, `close`.
+above the transport in an engine is unchanged: `get_text`, `goto`,
+`content`, `count_selector`, `evaluate`, `url`, `close`.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import requests
 
 logger = logging.getLogger("http_transport")
 
-# Every remote call is bounded (CLAUDE.md §8). `requests` imposes no
+# Every remote call is bounded. `requests` imposes no
 # timeout of its own, and a hung socket with no timeout is a run that
 # never ends and never says why.
 REQUEST_TIMEOUT = 30
@@ -52,7 +52,7 @@ def _mask(text: Any) -> str:
     `HTTPError` and of every connection error, so an endpoint that takes a
     key as a query parameter leaks it the moment anything goes wrong. And
     a masker that handles the first occurrence prints the password the
-    other four times while looking like it works (CLAUDE.md §8).
+    other four times while looking like it works.
     """
     out = str(text)
     out = re.sub(r"(?i)\b((?:client)?key|token|api[_-]?key|password)=[^&\s\"']+",
@@ -64,12 +64,10 @@ def _mask(text: Any) -> str:
 class HttpSession:
     """A `requests` session shaped like the browser sessions it replaces."""
 
-    def __init__(self, proxy_url: Optional[str], user_agent: str,
-                 client_version: str):
+    def __init__(self, proxy_url: Optional[str], user_agent: str):
         self.session = requests.Session()
         self.proxy_url = proxy_url
         self.user_agent = user_agent
-        self.client_version = client_version
         # Not owned in the browser sense; the attribute exists so the
         # engines' shared teardown does not have to know which transport
         # it is closing.
@@ -82,7 +80,7 @@ class HttpSession:
         if proxy_url:
             # Credentials ride in the session's own proxy field, never on
             # a command line — the same rule the browser engines follow
-            # for `--proxy-server` (CLAUDE.md §8). Unlike Selenium, an
+            # for `--proxy-server`. Unlike Selenium, an
             # HTTP client CAN authenticate a proxy, which is worth knowing
             # when choosing a transport.
             self.session.proxies.update({"http": proxy_url,
@@ -98,20 +96,6 @@ class HttpSession:
         except requests.RequestException as exc:
             raise TransportError(_mask(exc)) from exc
         return response.status_code, response.text
-
-    def post_json(self, url: str, headers: Dict[str, str],
-                  body: Dict[str, Any]) -> Tuple[Optional[int], Any]:
-        try:
-            response = self.session.post(url, headers=headers, json=body,
-                                         timeout=REQUEST_TIMEOUT)
-        except requests.RequestException as exc:
-            raise TransportError(_mask(exc)) from exc
-        try:
-            return response.status_code, response.json()
-        except ValueError:
-            # A refusal is not JSON. Hand the body back as text so the
-            # classifier can name it rather than the run dying on a decode.
-            return response.status_code, response.text
 
     def goto(self, url: str) -> Optional[int]:
         """Fetch a page and keep it, so `content()` has something to read.
