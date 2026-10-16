@@ -5,6 +5,12 @@ format; SemVer as closely as a CLI toolkit can manage.
 
 ## [Unreleased]
 
+### Changed
+
+- CI only: the canary bills a Scraping Browser session (`TIKTOK_CDP_ENDPOINT`),
+  so it now runs weekly (Mondays 06:47 UTC) instead of daily; a manual dispatch
+  still runs it.
+
 ## [0.2.0] — 2026-10-15
 
 > **Behaviour changes.**
