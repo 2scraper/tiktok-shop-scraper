@@ -198,7 +198,7 @@ durable — `.env.example` documents the shape, not a credential.
 
 ## The canary
 
-`canary.yml` runs daily and on dispatch. Unlike its three siblings, this
+`canary.yml` runs weekly (Mondays) and on dispatch. Unlike its three siblings, this
 repo's canary **needs a secret**: the access is a Scraping Browser profile
 that has already visited tiktok.com (measured 2026-09-22: 0 of 3 product
 pages to a plain client, a local browser or a US residential exit), so a
