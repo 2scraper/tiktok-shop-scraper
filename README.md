@@ -1,4 +1,4 @@
-# tiktok-shop-scraper
+# TikTok Shop Scraper — Product Prices, Sales and Sellers in Python
 
 [![release](https://img.shields.io/github/v/release/2scraper/tiktok-shop-scraper?sort=semver)](https://github.com/2scraper/tiktok-shop-scraper/releases)
 [![tests](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml/badge.svg)](https://github.com/2scraper/tiktok-shop-scraper/actions/workflows/tests.yml)
@@ -7,6 +7,8 @@
 [![licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 [![engines](https://img.shields.io/badge/engines-Playwright%20%7C%20Selenium%20%7C%20pyppeteer%20%7C%20CDP-informational)](#what-it-took-to-get-a-single-product-page)
 [![needs the Scraping Browser API](https://img.shields.io/badge/needs-Scraping%20Browser%20API-orange)](#what-it-took-to-get-a-single-product-page)
+
+**TikTok Shop scraper** — an open-source (MIT) Python tool that reads TikTok Shop product pages and writes price and original price, discount, units sold, rating and review count, the seller and their shop statistics and the shipping fee to JSON or CSV. Measured 2026-09-22, curl, local Chromium and a US residential exit all got TikTok's Security Check page, and only a 2Captcha Scraping Browser API profile that had already visited tiktok.com was served (3 of 3 product pages), so this repo asks for `--cdp-endpoint`. Use it for product price monitoring, or compare two runs with `diff_runs.py`.
 
 Extract TikTok Shop product listings — price and original price, the
 discount, units sold, rating and review count, the seller and their shop
@@ -212,6 +214,23 @@ Anything else — a challenge (exit 3), a page not obtained (exit 5), zero
 rows — is red.
 
 ---
+
+## Guides
+
+- [How to run the 2scraper scrapers: setup, proxies, exit codes and access modes](https://2captcha.com/h/how-to-run-2scraper-open-source-scrapers) — installation, `.env`, `.meta.json` for the whole family.
+
+## Related scrapers
+
+Same CLI conventions, same output contract (one row per item, JSON or CSV, a `.meta.json` sidecar and shared exit codes):
+
+- [Tokopedia scraper](https://github.com/2scraper/tokopedia-scraper) — IDR prices, discounts, ratings, sold counts and shops…
+- [Tractor Supply scraper](https://github.com/2scraper/tractorsupply-scraper) — Categories, departments and searches
+- [Woolworths scraper](https://github.com/2scraper/woolworths-scraper) — Prices, unit prices, specials, health star ratings…
+- [Amazon scraper](https://github.com/2scraper/amazon-scraper) — Search results, best-seller grids, product pages and reviews…
+- [Andie Swim scraper](https://github.com/2scraper/andieswim-scraper) — Collections, keyword lookups and per-size stock…
+- [Bershka scraper](https://github.com/2scraper/bershka-scraper) — Every SKU in a Bershka category
+
+All scrapers: [github.com/2scraper](https://github.com/2scraper) · Need another site? [Open a request](https://github.com/2scraper/.github/issues/new?title=%5BScraper%20request%5D%20)
 
 ## Contributing
 
