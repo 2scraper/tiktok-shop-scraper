@@ -7,6 +7,7 @@ format; SemVer as closely as a CLI toolkit can manage.
 
 ### Changed
 
+- CI only: the scheduled canary now starts at 09:07 UTC (Mondays) instead of 06:47, so canaries that share one Scraping Browser profile no longer start at the same time and lock each other out.
 - CI only: the canary bills a Scraping Browser session (`TIKTOK_CDP_ENDPOINT`),
   so it now runs weekly (Mondays 06:47 UTC) instead of daily; a manual dispatch
   still runs it.
