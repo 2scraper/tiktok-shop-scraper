@@ -17,8 +17,8 @@ name: canary
 
 on:
   schedule:
-    # Mondays 06:47 UTC. Weekly, not daily: every run bills a Scraping Browser session.
-    - cron: "47 6 * * 1"
+    # Mondays 09:07 UTC. Weekly, not daily: every run bills a Scraping Browser session.
+    - cron: "7 9 * * 1"
   workflow_dispatch:
 
 permissions:
