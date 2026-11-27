@@ -7,6 +7,8 @@ format; SemVer as closely as a CLI toolkit can manage.
 
 ### Changed
 
+- CI only: the offline-checks job runs on `ubuntu-24.04` instead of `ubuntu-latest`, which moved to Ubuntu 26.04, where `actions/setup-python` has no Python 3.9 build. 3.9 stays the supported floor.
+- Docker: the image installs `libatomic1` before Playwright. Recent Playwright releases' Node driver needs it to run `playwright install` at all, and the slim base image does not ship it, so the image build failed.
 - CI only: the scheduled canary now starts at 09:07 UTC (Mondays) instead of 06:47, so canaries that share one Scraping Browser profile no longer start at the same time and lock each other out.
 - CI only: the canary bills a Scraping Browser session (`TIKTOK_CDP_ENDPOINT`),
   so it now runs weekly (Mondays 06:47 UTC) instead of daily; a manual dispatch
